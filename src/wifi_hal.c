@@ -1039,11 +1039,10 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
     bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     wifi_bss_info_t *backhaul, *tmp = NULL, *best = NULL;
     int best_rssi = -100;
-    char frame[] =  {0x03, 0x01, 0x03, 0x00, 0x00, 0x1f, 0x20, 0x00, 0xff};
-    mac_address_t sta ={0xff, 0xff,0xff,0xff,0xff,0xff};
+    char frame[] =  {0x04, 0x0a, 0x45, 0x6c, 0x02, 0x00, 0x00, 0x0c, 0x00,0x00,0x01,0x04,0x00,0x0c,0x01,0x07,0x01,0x00,0x00,0x00,0x00};
+    mac_address_t sta ={0xd6, 0x22,0x44,0x11,0x62,0x70};
 
     NULL_PTR_ASSERT(bss);
-    wifi_hal_dbg_print("%s:%d before sending connect send an action frame\n",__func__,__LINE__);
 
     if ((interface = get_interface_by_vap_index(ap_index)) == NULL) {
         wifi_hal_error_print("%s:%d:interface for ap index:%d not found\n", __func__, __LINE__, ap_index);
@@ -1083,11 +1082,14 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
         pthread_mutex_unlock(&interface->scan_info_mutex);
     }
     wifi_hal_dbg_print("%s:%d before sending connect send an action frame\n",__func__,__LINE__);
-    wifi_hal_send_mgmt_frame(apIndex, sta, (unsigned char *)frame, sizeof(frame), 0, 0);
+    wifi_hal_send_mgmt_frame(ap_index, sta, (unsigned char *)frame, sizeof(frame), 0, 0);
     wifi_hal_dbg_print("%s:%d before sending  an action frame\n",__func__,__LINE__);
     if (nl80211_connect_sta(interface) != 0) {
         return RETURN_ERR;
     }
+    wifi_hal_dbg_print("%s:%d after connect send an action frame\n",__func__,__LINE__);
+    wifi_hal_send_mgmt_frame(ap_index, sta, (unsigned char *)frame, sizeof(frame), 0, 0);
+    wifi_hal_dbg_print("%s:%d after sending  an action frame\n",__func__,__LINE__);
 
     return RETURN_OK;
 }
