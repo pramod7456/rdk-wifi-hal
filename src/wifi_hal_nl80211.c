@@ -8911,7 +8911,9 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
             goto failure;
         }
     }
+    char vid[] =  {0xdd, 0x09, 0x00, 0x10, 0x18, 0x02, 0xff, 0xff, 0x1c, 0xff, 0xff};
 
+    nla_put(msg, NL80211_ATTR_IE, 11, vid);
     ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
     if (ret) {
         wifi_hal_stats_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
@@ -9879,6 +9881,8 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     if (vap->vap_mode == wifi_vap_mode_sta) {
         if (strcmp(scan_info_ap->ssid, vap->u.sta_info.ssid) == 0) {
             wifi_hal_stats_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d on freq:%d for ssid:%s\n", __func__, __LINE__,
+                        to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->freq, scan_info_ap->ssid);
+            wifi_hal_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d on freq:%d for ssid:%s\n", __func__, __LINE__,
                         to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->freq, scan_info_ap->ssid);
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
