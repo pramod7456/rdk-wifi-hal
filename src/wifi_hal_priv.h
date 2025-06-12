@@ -65,11 +65,10 @@
 #include "collection.h"
 #include "driver.h"
 
-#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 #include "wpa_supplicant_i.h"
 #include "bss.h"
 #include "sme.h"
-#endif
+//#endif
 
 /*
 switch to use nl80211_copy.h because 'linux/nl80211.h' from linux header does not contain
@@ -246,7 +245,7 @@ extern "C" {
 #endif /* HOSTAPD_VERSION >= 211 */
 
 extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
-#ifdef CONFIG_WIFI_EMULATOR
+#ifndef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
 #endif
 typedef struct wifi_enum_to_str_map
@@ -498,9 +497,9 @@ typedef struct wifi_interface_info_t {
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wifi_ie_info_t bss_elem_ie[MAX_NUM_RADIOS];
     wifi_ie_info_t beacon_elem_ie[MAX_NUM_RADIOS];
-    struct wpa_supplicant wpa_s;
-    struct wpa_ssid current_ssid_info;
 #endif
+    struct wpa_ssid current_ssid_info;
+    struct wpa_supplicant wpa_s;
 } wifi_interface_info_t;
 
 #define MAX_RATES   16

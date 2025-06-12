@@ -668,8 +668,9 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         eapol_sm_notify_portEnabled(interface->u.sta.wpa_sm->eapol, TRUE);
     }
 
-    if (interface->u.sta.pending_rx_eapol) {
+    if (1) {//interface->u.sta.pending_rx_eapol) {
         struct ieee802_1x_hdr *hdr;
+        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
 
         hdr = (struct ieee802_1x_hdr *)(interface->u.sta.rx_eapol_buff + sizeof(struct ieee8023_hdr));
 
@@ -687,7 +688,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     if (sec->mode == wifi_security_mode_none) {
         wpa_sm_set_state(interface->u.sta.wpa_sm, WPA_COMPLETED);
     }
-#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
 #endif
     interface->u.sta.state = WPA_ASSOCIATED;

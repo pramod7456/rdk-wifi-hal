@@ -37,9 +37,7 @@
 #include "ap/rrm.h"
 #include "ap/neighbor_db.h"
 
-#ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
-#endif
 #ifdef BANANA_PI_PORT
 #include "wpa_supplicant/config.h"
 #endif
@@ -102,9 +100,9 @@
 static int g_fd_arr[MAX_VAP] = {0};
 static int g_IfIdx_arr[MAX_VAP] = {0};
 static unsigned char g_vapSmac[MAX_VAP][MAC_ADDRESS_LEN] = {'\0'};
-#ifdef CONFIG_WIFI_EMULATOR
+//#ifndef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
-#endif
+//#endif
 
 #if !defined(CMXB7_PORT)
 wifi_hal_priv_t g_wifi_hal;
@@ -1039,8 +1037,6 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
     bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     wifi_bss_info_t *backhaul, *tmp = NULL, *best = NULL;
     int best_rssi = -100;
-    char frame[] =  {0x04, 0x12, 0xa4, 0x34, 0x15, 0xd4, 0xe3, 0xcb, 0xac,0x5c,0xff,0xff,0x00,0x00,0x00,0x86,0x85,0x0b,0x03,0x01,0xfe,0x06,0x03,0x03,0x8f,0x00};
-    mac_address_t sta ={0xd6, 0x22,0x44,0x11,0x62,0x70};
 
     NULL_PTR_ASSERT(bss);
 
@@ -1081,15 +1077,9 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
         *backhaul = *best;
         pthread_mutex_unlock(&interface->scan_info_mutex);
     }
-    wifi_hal_dbg_print("%s:%d before sending connect send an action frame\n",__func__,__LINE__);
-    wifi_hal_send_mgmt_frame(ap_index, sta, (unsigned char *)frame, sizeof(frame), 0, 0);
-    wifi_hal_dbg_print("%s:%d before sending  an action frame\n",__func__,__LINE__);
     if (nl80211_connect_sta(interface) != 0) {
         return RETURN_ERR;
     }
-    wifi_hal_dbg_print("%s:%d after connect send an action frame\n",__func__,__LINE__);
-    wifi_hal_send_mgmt_frame(ap_index, sta, (unsigned char *)frame, sizeof(frame), 0, 0);
-    wifi_hal_dbg_print("%s:%d after sending  an action frame\n",__func__,__LINE__);
 
     return RETURN_OK;
 }
@@ -1187,7 +1177,7 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
     return RETURN_OK;
 }
 
-#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if  !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface)
 {
     return &interface->current_ssid_info;
@@ -1251,11 +1241,7 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
         memset(interface->wpa_s.conf->ssid, 0, sizeof(struct wpa_ssid));
     }
 
-#ifdef CONFIG_WIFI_EMULATOR
     interface->wpa_s.driver = &g_wpa_supplicant_driver_nl80211_ops;
-#else
-    interface->wpa_s.driver = &g_wpa_driver_nl80211_ops;
-#endif
     dl_list_init(&interface->wpa_s.bss);
     dl_list_init(&interface->wpa_s.bss_tmp_disallowed);
     wifi_hal_info_print("%s:%d: wpa supplicant params init success\n", __func__, __LINE__);
@@ -1662,7 +1648,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             }
         }
-#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if  !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         //Init wpa-supplicant params.
         if (vap->vap_mode == wifi_vap_mode_sta) {
             deinit_wpa_supplicant(interface);
@@ -2289,7 +2275,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     ssid_t  ssid_list[8];
     int op_class, freq_num = 0;
 
-    wifi_hal_stats_dbg_print("%s:%d: index: %d mode: %d dwell time: %d\n", __func__, __LINE__, index,
+    wifi_hal_dbg_print("%s:%d: index: %d mode: %d dwell time: %d\n", __func__, __LINE__, index,
         scan_mode, dwell_time);
 
     RADIO_INDEX_ASSERT(index);
@@ -2318,7 +2304,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 
     if (found == false) {
-        wifi_hal_stats_error_print("%s:%d:Could not find sta interface on radio index: %d, start scan failure\n", 
+        wifi_hal_error_print("%s:%d:Could not find sta interface on radio index: %d, start scan failure\n", 
             __func__, __LINE__, index);
         return RETURN_ERR;
     }
@@ -2375,7 +2361,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 
     strcpy(ssid_list[0], vap->u.sta_info.ssid);
-    wifi_hal_stats_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
+    wifi_hal_dbg_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
 
     pthread_mutex_lock(&interface->scan_info_mutex);
     hash_map_cleanup(interface->scan_info_map);
