@@ -127,24 +127,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-    char output_val[BPI_LEN_32];
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
-
-    if (map == NULL)
-    {
-        wifi_hal_dbg_print("%s:%d: wifi_vap_info_map_t *map is NULL \n", __func__, __LINE__);
-    }
-    for (index = 0; index < map->num_vaps; index++)
-    {
-      if (map->vap_array[index].vap_mode == wifi_vap_mode_ap)
-      {
-	//   Assigning default radius values 
-	    wifi_nvram_defaultRead("radius_s_port",output_val);
-	    map->vap_array[index].u.bss_info.security.u.radius.s_port = atoi(output_val);
-	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[index].u.bss_info.security.u.radius.s_ip);
-	    wifi_nvram_defaultRead("radius_key",map->vap_array[index].u.bss_info.security.u.radius.s_key);
-      }
-    } 
     return 0;
 }
 
@@ -240,7 +223,30 @@ int nvram_get_current_ssid(char *l_ssid, int vap_index)
 
 int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    char output_val[BPI_LEN_32];
+    int i;
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+
+    if (map == NULL)
+    {
+        wifi_hal_dbg_print("%s:%d: wifi_vap_info_map_t *map is NULL \n", __func__, __LINE__);
+    }
+    for (i = 0; i < map->num_vaps; i++)
+    {
+      if (map->vap_array[i].vap_mode == wifi_vap_mode_ap)
+      {
+	    if ((get_security_mode_support_radius(map->vap_array[i].u.bss_info.security.mode)) || is_wifi_hal_vap_lnf_radius(map->vap_array[i].vap_index) || is_wifi_hal_vap_hotspot_secure(map->vap_array[i].vap_index)) {
+	//   Assigning default radius values
+	    wifi_nvram_defaultRead("radius_s_port",output_val);
+	    map->vap_array[i].u.bss_info.security.u.radius.s_port = atoi(output_val);
+	    map->vap_array[i].u.bss_info.security.u.radius.port = atoi(output_val);
+	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.s_ip);
+	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.ip);
+	    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.s_key);
+	    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.key);
+	    }
+      }
+    }
     return 0;
 }
 
@@ -710,38 +716,6 @@ INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
 {
     return 0;
 }
-
-#ifdef PLATFORM_LINUX
-int wifi_rrm_send_beacon_req(struct wifi_interface_info_t *interface, const u8 *addr,
-    u16 num_of_repetitions, u8 measurement_request_mode, u8 oper_class, u8 channel,
-    u16 random_interval, u16 measurement_duration, u8 mode, const u8 *bssid,
-    struct wpa_ssid_value *ssid, u8 *rep_cond, u8 *rep_cond_threshold, u8 *rep_detail,
-    const u8 *ap_ch_rep, unsigned int ap_ch_rep_len, const u8 *req_elem, unsigned int req_elem_len,
-    u8 *ch_width, u8 *ch_center_freq0, u8 *ch_center_freq1, u8 last_indication)
-{
-    return 0;
-}
-
-/* called by BTM API */
-int wifi_wnm_send_bss_tm_req(struct wifi_interface_info_t *interface, struct sta_info *sta,
-    u8 dialog_token, u8 req_mode, int disassoc_timer, u8 valid_int, const u8 *bss_term_dur,
-    const char *url, const u8 *nei_rep, size_t nei_rep_len, const u8 *mbo_attrs, size_t mbo_len)
-{
-    return 0;
-}
-
-int handle_wnm_action_frame(struct wifi_interface_info_t *interface, const mac_address_t sta,
-    struct ieee80211_mgmt *mgmt, size_t len)
-{
-    return 0;
-}
-
-int handle_rrm_action_frame(struct wifi_interface_info_t *interface, const mac_address_t sta,
-    const struct ieee80211_mgmt *mgmt, size_t len, int ssi_signal)
-{
-    return 0;
-}
-#endif
 
 #ifdef CONFIG_IEEE80211BE
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
