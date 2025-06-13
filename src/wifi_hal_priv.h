@@ -245,9 +245,8 @@ extern "C" {
 #endif /* HOSTAPD_VERSION >= 211 */
 
 extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
-#ifndef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
-#endif
+
 typedef struct wifi_enum_to_str_map
 {
     int enum_val;
