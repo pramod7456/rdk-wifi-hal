@@ -27,6 +27,7 @@
 #include <stdarg.h>
 #include <pthread.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <net/if.h>
 #include <linux/rtnetlink.h>
 #include <netpacket/packet.h>
@@ -1188,6 +1189,34 @@ BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name)
     return false;
 }
 
+wifi_vap_info_t* get_wifi_vap_info_from_interfacename(char *interface_name)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+    unsigned int i;
+
+    if (!interface_name) {
+        return NULL;
+    }
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+#ifndef FEATURE_SINGLE_PHY
+        radio = get_radio_by_rdk_index(i);
+#else //FEATURE_SINGLE_PHY
+        radio = &g_wifi_hal.radio_info[i];
+#endif //FEATURE_SINGLE_PHY
+        interface = hash_map_get_first(radio->interface_map);
+
+        while (interface != NULL) {
+            if (strncmp(interface->name, interface_name, strlen(interface_name)) == 0) {
+                return &interface->vap_info;
+            }
+            interface = hash_map_get_next(radio->interface_map, interface);
+        }
+    }
+    return NULL;
+}
+
 BOOL is_wifi_hal_6g_radio_from_interfacename(char *interface_name)
 {
     unsigned int index = 0;
@@ -1577,6 +1606,28 @@ int getIpStringFromAdrress (char * ipString, ip_addr_t * ip)
     return 1;
 }
 #endif
+
+int get_mac_address (char *intf_name,  mac_address_t mac)
+{
+    int sock;
+    struct ifreq ifr;
+
+    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        return RETURN_ERR;
+    }
+
+    ifr.ifr_addr.sa_family = AF_INET;
+    strcpy(ifr.ifr_name, intf_name);
+    if (ioctl(sock, SIOCGIFHWADDR, &ifr) != 0) {
+        close(sock);
+        return RETURN_ERR;
+    }
+
+    memcpy(mac, (unsigned char *)ifr.ifr_hwaddr.sa_data, sizeof(mac_address_t));
+    close(sock);
+
+    return RETURN_OK;
+}
 
 int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *interface)
 {
