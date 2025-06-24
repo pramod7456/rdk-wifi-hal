@@ -2387,7 +2387,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     hash_map_cleanup(interface->scan_info_map);
     pthread_mutex_unlock(&interface->scan_info_mutex);
 
-    return (nl80211_start_scan(interface, 0, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+    return (nl80211_start_scan(interface, NL80211_SCAN_FLAG_COLOCATED_6GHZ, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }
 
 /*****************************/
