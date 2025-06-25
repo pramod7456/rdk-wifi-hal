@@ -522,7 +522,7 @@ INT wifi_hal_init()
         interface = hash_map_get_first(radio->interface_map);
 
         while (interface != NULL) {
-            if (update_hostap_data(interface) == RETURN_OK) {
+            if (interface->vap_info.vap_mode == wifi_vap_mode_ap && update_hostap_data(interface) == RETURN_OK) {
                 update_hostap_iface(interface);
                 update_hostap_iface_flags(interface);
                 init_hostap_hw_features(interface);
@@ -1613,6 +1613,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
                     __LINE__, interface->name);
                 wifi_drv_set_operstate(interface, 1);
+#ifdef TARGET_GEMINI7_2
+		if (!vap->u.sta_info.enabled) {
+                    nl80211_delete_interface(radio->index, interface->name, interface->index);
+		}
+#endif
             } else {
                 wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__,
                     interface->name);
@@ -4495,6 +4500,18 @@ int wifi_hal_setApMacAddressControlMode(uint32_t apIndex, uint32_t mac_filter_mo
     }
 
     return (nl80211_set_acl(interface));
+}
+
+int wifi_hal_add_station_bridge( char *interface_name,char *bridge_name)
+{
+    wifi_hal_error_print("Enter %s:%d\n",__func__,__LINE__);
+   nl80211_remove_from_bridge(interface_name);
+    if (nl80211_create_bridge(interface_name, bridge_name) != 0) {
+        wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
+            __func__, __LINE__, interface_name, bridge_name);
+        return RETURN_ERR;
+    }
+    return 0;
 }
 
 int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)

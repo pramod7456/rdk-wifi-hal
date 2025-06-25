@@ -82,8 +82,9 @@ void wifi_authenticator_run()
 
 void init_radius_config(wifi_interface_info_t *interface)
 {
-    if (!interface->vap_initialized) {
-        struct hostapd_bss_config *conf;
+    struct hostapd_bss_config *conf = &interface->u.ap.conf;
+
+    if (!interface->vap_initialized && conf->ssid.wpa_passphrase == NULL) {
         char *config_methods = (char *)malloc(WPS_METHODS_SIZE);
         memset(config_methods, '\0', WPS_METHODS_SIZE);
 
@@ -93,13 +94,11 @@ void init_radius_config(wifi_interface_info_t *interface)
         // vap = &interface->vap_info;
         //  ap_index = vap->vap_index;
 
-        conf = &interface->u.ap.conf;
         conf->radius = &interface->u.ap.radius;
         conf->radius->num_acct_servers = 0;
 
         conf->nas_identifier = interface->u.ap.nas_identifier;
-        char *wpa_passphrase = (char *)malloc(256);
-        conf->ssid.wpa_passphrase = wpa_passphrase;
+        conf->ssid.wpa_passphrase = calloc(1, 256);
 #ifdef CONFIG_WPS
         conf->config_methods = config_methods;
         conf->ap_pin = calloc(1, WPS_PIN_SIZE);
@@ -2718,7 +2717,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 return;
             }
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, key_mgmt);
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+            wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
         }
     }
 
@@ -2728,7 +2727,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
     }
     wpa_sm_notify_assoc(sm, sm->bssid);
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
 }
 
 static void wpa_sm_eapol_notify_done(void *ctx)
@@ -2826,16 +2825,18 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     struct eapol_ctx *ctx;
     wifi_vap_info_t *vap;
     wifi_vap_security_t *sec;
-	char *anonymous_identity;
-	char *identity = "58:96:30:3F:AD:4E";
-	char *password = "307030029354100555";
-	char *ca_cert = "/etc/ssl/certs/ca-certificates.crt";
+    char *anonymous_identity;
+    char *identity = "58:96:30:3F:AD:4E";
+    char *password = "307030029354100555";
+    char *ca_cert = "/etc/ssl/certs/ca-certificates.crt";
     char *domain_match = "secure.aaa.wifi.comcast.com";
-	wifi_hal_capability_t hal_cap;
-	 mac_addr_str_t cm_mac;
-	wifi_hal_getHalCapability(&hal_cap);
+  #if 0
+    wifi_hal_capability_t hal_cap;
+    mac_addr_str_t cm_mac;
+    wifi_hal_getHalCapability(&hal_cap);
     to_mac_str(hal_cap.wifi_prop.cm_mac,cm_mac);
     wifi_hal_dbg_print("Pramod device cmmac=%s and serial no=%s\n",cm_mac,hal_cap.wifi_prop.serialNo);
+   #endif
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
 
@@ -2922,7 +2923,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             }
 #ifndef CONFIG_WIFI_EMULATOR
             if (vap->vap_mode == wifi_vap_mode_sta) {
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+                wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
                     interface->u.sta.wpa_eapol_config.openssl_ciphers = (char *)malloc(MAX_STR_LEN);
                     if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
@@ -2947,7 +2948,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                     break;
                 default:
                     // using PAP as default value.
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+                    wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                     strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=MSCHAP", MAX_STR_LEN - 1);
                     break;
                 }
