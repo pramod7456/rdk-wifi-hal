@@ -2819,7 +2819,8 @@ static void wpa_sm_eapol_eap_error_cb(void *ctx, int error_code)
 #define MAX_STR_LEN 64
 #define SUPPORTED_CIPHERS \
         "DEFAULT:@SECLEVEL=0"
-#define INVALID_ANONYMOUS_IDENTITY_FLAG "/nvram/use_invalid_anonymous_identity"
+//#define INVALID_ANONYMOUS_IDENTITY_FLAG "/nvram/use_invalid_anonymous_identity"
+
 void update_eapol_sm_params(wifi_interface_info_t *interface)
 {
     struct eapol_ctx *ctx;
@@ -2828,8 +2829,8 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     char *anonymous_identity;
     char *identity = "58:96:30:3F:AD:4E";
     char *password = "307030029354100555";
-    char *ca_cert = "/etc/ssl/certs/ca-certificates.crt";
-    char *domain_match = "secure.aaa.wifi.comcast.com";
+    // char *ca_cert = "/etc/ssl/certs/ca-certificates.crt";
+    // char *domain_match = "secure.aaa.wifi.comcast.com";
   #if 0
     wifi_hal_capability_t hal_cap;
     mac_addr_str_t cm_mac;
@@ -2840,12 +2841,13 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
 
+#if 0
     if (access(INVALID_ANONYMOUS_IDENTITY_FLAG, F_OK) == 0) {
         anonymous_identity = "anonymous@comcastbusiness.com";
     } else {
         anonymous_identity = "anonymous@xfignite.com";
     }
-
+#endif
 
     if (interface->u.sta.wpa_sm->eapol == NULL) {
         ctx = os_zalloc(sizeof(struct eapol_ctx));
@@ -2962,10 +2964,11 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             interface->u.sta.wpa_eapol_config.identity_len = strlen(identity);
             interface->u.sta.wpa_eapol_config.password = (unsigned char *)password;
             interface->u.sta.wpa_eapol_config.password_len = strlen(password);
-            interface->u.sta.wpa_eapol_config.anonymous_identity = (unsigned char*)anonymous_identity;
-			interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(anonymous_identity);
-            interface->u.sta.wpa_eapol_config.cert.ca_cert = (unsigned char *)ca_cert;
-            interface->u.sta.wpa_eapol_config.cert.domain_match = (unsigned char *)domain_match;
+         //   interface->u.sta.wpa_eapol_config.anonymous_identity = (unsigned char*)anonymous_identity;
+//			interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(anonymous_identity);
+
+         //   interface->u.sta.wpa_eapol_config.cert.ca_cert = (unsigned char *)ca_cert;
+         //   interface->u.sta.wpa_eapol_config.cert.domain_match = (unsigned char *)domain_match;
             //interface->u.sta.wpa_eapol_config.cert.subject_match = (unsigned char *)subject_match;
         wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
 
