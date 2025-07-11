@@ -2826,7 +2826,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     struct eapol_ctx *ctx;
     wifi_vap_info_t *vap;
     wifi_vap_security_t *sec;
-    //char *anonymous_identity;
+    char *anonymous_identity;
     char *identity = "58:96:30:3F:AD:4E";
     char *password = "307030029354100555";
     // char *ca_cert = "/etc/ssl/certs/ca-certificates.crt";
@@ -2840,6 +2840,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
    #endif
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
+    anonymous_identity = "anonymous@xfignite.com";
 
 #if 0
     if (access(INVALID_ANONYMOUS_IDENTITY_FLAG, F_OK) == 0) {
@@ -2964,8 +2965,8 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             interface->u.sta.wpa_eapol_config.identity_len = strlen(identity);
             interface->u.sta.wpa_eapol_config.password = (unsigned char *)password;
             interface->u.sta.wpa_eapol_config.password_len = strlen(password);
-         //   interface->u.sta.wpa_eapol_config.anonymous_identity = (unsigned char*)anonymous_identity;
-//			interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(anonymous_identity);
+            interface->u.sta.wpa_eapol_config.anonymous_identity = (unsigned char*)anonymous_identity;
+	    interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(anonymous_identity);
 
          //   interface->u.sta.wpa_eapol_config.cert.ca_cert = (unsigned char *)ca_cert;
          //   interface->u.sta.wpa_eapol_config.cert.domain_match = (unsigned char *)domain_match;
