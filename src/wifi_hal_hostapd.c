@@ -2826,7 +2826,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     struct eapol_ctx *ctx;
     wifi_vap_info_t *vap;
     wifi_vap_security_t *sec;
-    char *anonymous_identity;
+    //char *anonymous_identity;
     char *identity = "58:96:30:3F:AD:4E";
     char *password = "307030029354100555";
     // char *ca_cert = "/etc/ssl/certs/ca-certificates.crt";
