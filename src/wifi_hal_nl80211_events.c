@@ -38,9 +38,7 @@
 #include "wifi_hal.h"
 #include "wifi_hal_priv.h"
 #include "ap/dfs.h"
-#ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
-#endif
 int no_seq_check(struct nl_msg *msg, void *arg)
 {
     return NL_OK;
@@ -628,8 +626,6 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     mac_addr_str_t bssid_str;
     wifi_bss_info_t *backhaul;
     wifi_vap_security_t *sec;
-    wifi_radio_info_t *radio;
-    wifi_radio_operationParam_t *radio_param;
 
     sec = &interface->vap_info.u.sta_info.security;
 
@@ -637,8 +633,6 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
 
     wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s\n", __func__, __LINE__,
         to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
-    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
-    radio_param = &radio->oper_param;
 
 
     assoc_req = interface->u.sta.assoc_req;
@@ -667,7 +661,6 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
 
     }
 
-    ieee80211_freq_to_channel_ext(backhaul->freq,0,0,(unsigned char*)&radio_param->operatingClass, (unsigned char*)&radio_param->channel);
 
     if (tb[NL80211_ATTR_REQ_IE] == NULL) { 
         wifi_hal_dbg_print("%s:%d: req ie attribute absent\n", __func__, __LINE__);
@@ -699,45 +692,39 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         wifi_hal_dbg_print("%s:%d: pmkid attribute absent\n", __func__, __LINE__);
     }
 
+    update_wpa_sm_params(interface);
+
     if (sec->mode != wifi_security_mode_none) {
-        eapol_sm_notify_eap_fail(interface->u.sta.wpa_sm->eapol, 0);
-        eapol_sm_notify_eap_success(interface->u.sta.wpa_sm->eapol, 0);
+        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+        update_eapol_sm_params(interface);
         eapol_sm_notify_portEnabled(interface->u.sta.wpa_sm->eapol, TRUE);
     }
 
-    if (interface->u.sta.pending_rx_eapol) {
-        void *hdr;
-        int buff_len;
-#ifdef EAPOL_OVER_NL
-        hdr = interface->u.sta.rx_eapol_buff;
-        buff_len = interface->u.sta.buff_len;
-#else
+    if (1) {//interface->u.sta.pending_rx_eapol) {
+        struct ieee802_1x_hdr *hdr;
+        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+
         hdr = (struct ieee802_1x_hdr *)(interface->u.sta.rx_eapol_buff + sizeof(struct ieee8023_hdr));
-        buff_len = interface->u.sta.buff_len - sizeof(struct ieee8023_hdr);
-#endif
 
         //XXX: eapol_sm_rx_eapol
 #if HOSTAPD_VERSION >= 211 //2.11
-        wpa_sm_rx_eapol(interface->u.sta.wpa_sm, (unsigned char *)&interface->u.sta.src_addr,
-            (unsigned char *)hdr, buff_len, FRAME_ENCRYPTION_UNKNOWN);
+        wpa_sm_rx_eapol(interface->u.sta.wpa_sm, (unsigned char *)&interface->u.sta.src_addr, (unsigned char *)hdr,
+            interface->u.sta.buff_len - sizeof(struct ieee8023_hdr), FRAME_ENCRYPTION_UNKNOWN);
 #else
-        wpa_sm_rx_eapol(interface->u.sta.wpa_sm, (unsigned char *)&interface->u.sta.src_addr,
-            (unsigned char *)hdr, buff_len);
+        wpa_sm_rx_eapol(interface->u.sta.wpa_sm, (unsigned char *)&interface->u.sta.src_addr, (unsigned char *)hdr,
+            interface->u.sta.buff_len - sizeof(struct ieee8023_hdr));
 #endif
         interface->u.sta.pending_rx_eapol = false;
     }
 
     if (sec->mode == wifi_security_mode_none) {
         wpa_sm_set_state(interface->u.sta.wpa_sm, WPA_COMPLETED);
-        interface->u.sta.state = WPA_COMPLETED;
-        wifi_drv_set_supp_port(interface, 1);
-    } else {
-        wpa_sm_set_state(interface->u.sta.wpa_sm, WPA_ASSOCIATED);
-        interface->u.sta.state = WPA_ASSOCIATED;
     }
-#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
 #endif
+    interface->u.sta.state = WPA_ASSOCIATED;
+        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
 }
 
 static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nlattr **tb)

@@ -32,7 +32,7 @@ hardware_platform = i686-linux-gnu
 
 if WIFI_EMULATOR
 lib_LTLIBRARIES = librdk_wifiemulatorhal.la
-librdk_wifiemulatorhal_la_CPPFLAGS = -I$(top_srcdir)/./include $(CPPFLAGS) -I$(top_srcdir)/../util_crypto -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/libnl3 -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/utils/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/ap/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/drivers/ -I$(top_srcdir)/../util
+librdk_wifiemulatorhal_la_CPPFLAGS = -I$(top_srcdir)/./include $(CPPFLAGS) -I$(top_srcdir)/../util_crypto -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/libnl3 -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/utils/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/ap/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/drivers/ -I$(top_srcdir)/../util -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/wpa_supplicant
 librdk_wifiemulatorhal_la_CFLAGS = -Wall -Werror -Wextra -Wno-unused-parameter -Wno-pointer-sign -Wno-sign-compare -Wno-type-limits -Wno-format-truncation -Wno-poison-system-directories -Wno-discarded-qualifiers
 librdk_wifiemulatorhal_la_SOURCES = wifi_hal_rx_test.c wifi_hal_data_rx.c wifi_hal_dpp.c wifi_hal_anqp.c wifi_hal_frame_test.c ../util_crypto/aes_siv.c wifi_tlv.c wifi_hal_rdk_util.c
 librdk_wifiemulatorhal_la_LDFLAGS = -lm -lcjson -lssl -lcrypto
@@ -45,7 +45,7 @@ librdk_wifiemulatorhal_la_SOURCES += ../platform/wifi-emulator/platform_emulator
 
 else
 lib_LTLIBRARIES = librdk_wifihal.la
-librdk_wifihal_la_CPPFLAGS = -I$(top_srcdir)/./include $(CPPFLAGS) -I$(top_srcdir)/../util_crypto -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/libnl3 -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/utils/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/ap/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/drivers/ -I$(top_srcdir)/../util
+librdk_wifihal_la_CPPFLAGS = -I$(top_srcdir)/./include $(CPPFLAGS) -I$(top_srcdir)/../util_crypto -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/libnl3 -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/utils/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/ap/ -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/drivers/ -I$(top_srcdir)/../util  -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/wpa_supplicant
 librdk_wifihal_la_CFLAGS = -Wall -Werror -Wextra -Wno-unused-parameter -Wno-pointer-sign -Wno-sign-compare -Wno-type-limits -Wno-format-truncation -Wno-poison-system-directories -Wno-discarded-qualifiers
 librdk_wifihal_la_SOURCES = wifi_hal_rx_test.c wifi_hal_data_rx.c wifi_hal_dpp.c wifi_hal_anqp.c wifi_hal_frame_test.c ../util_crypto/aes_siv.c wifi_tlv.c wifi_hal_rdk_util.c
 librdk_wifihal_la_LDFLAGS = -lm -lcjson -lssl -lcrypto
@@ -109,7 +109,7 @@ librdk_wifihal_la_SOURCES += ../platform/broadcom/platform.c
 endif
 
 if XLE_PORT
-librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/xle
+librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/xle -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/src/wpa_supplicant
 librdk_wifihal_la_SOURCES += ../platform/xle/platform_xle.c
 librdk_wifihal_la_LDFLAGS += -lrdkconfig
 endif
