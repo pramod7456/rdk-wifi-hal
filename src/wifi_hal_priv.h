@@ -865,7 +865,7 @@ int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char* buff, size_t le
 wifi_radio_info_t *get_radio_by_index(wifi_radio_index_t index);
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index);
 wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index);
-BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len);
+BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, size_t *ie_out_len);
 BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len);
 INT get_coutry_str_from_code(wifi_countrycode_type_t code, char *country);
 INT get_coutry_str_from_oper_params(wifi_radio_operationParam_t *operParams, char *country);
@@ -907,6 +907,7 @@ void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *e
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
 
+// emu_neighbor_stats_t is used by both CCI and Onewifi
 typedef struct {
     bool emu_enable;
     uint32_t radio_index;
@@ -914,11 +915,13 @@ typedef struct {
     wifi_neighbor_ap2_t data[];  // flexible array member
 } emu_neighbor_stats_t;
 
+#if defined(CONFIG_WIFI_EMULATOR)
 int     wifi_hal_emu_set_radio_channel_stats(unsigned int radio_index, bool emu_state, wifi_channelStats_t *chan_stat, unsigned int count, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state, wifi_associated_dev3_t *assoc_cli_stat, unsigned int count, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_radio_temp (unsigned int radio_index, bool emu_state, int temperature, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_state, wifi_radioTrafficStats2_t *radio_diag_stat, unsigned int count, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state, wifi_neighbor_ap2_t *neighbor_stats, unsigned int count);
+#endif //CONFIG_WIFI_EMULATOR
 #endif
 int     nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         unsigned int num_freq, unsigned int  *freq_list, unsigned int dwell_time,
@@ -1349,5 +1352,5 @@ static inline enum nl80211_iftype wpa_driver_nl80211_if_type(enum wpa_driver_if_
         return -1;
     }
 }
-
+int wifi_drv_set_supp_port(void *priv, int authorized);
 #endif // WIFI_HAL_PRIV_H
