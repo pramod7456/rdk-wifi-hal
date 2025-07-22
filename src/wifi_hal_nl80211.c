@@ -8896,6 +8896,14 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         }
         else {
             pos += ret;
+#if HOSTAPD_VERSION >= 210
+            if (interface->u.sta.wpa_sm->assoc_rsnxe_len > 0 &&
+                interface->u.sta.wpa_sm->assoc_rsnxe_len <= (sizeof(rsn_ie) - ret)) {
+                os_memcpy(pos, interface->u.sta.wpa_sm->assoc_rsnxe,
+                    interface->u.sta.wpa_sm->assoc_rsnxe_len);
+                pos += interface->u.sta.wpa_sm->assoc_rsnxe_len;
+            }
+#endif
             nla_put(msg, NL80211_ATTR_IE, pos - rsn_ie, rsn_ie);
         }
 
@@ -9201,9 +9209,11 @@ static void parse_supprates(const uint8_t type, uint8_t len,
             if (bss->oper_freq_band & WIFI_FREQUENCY_5_BAND) {
                 bss->supp_standards |= WIFI_80211_VARIANT_A;
                 bss->oper_standards = WIFI_80211_VARIANT_A;
-            } else {
+            } else if (bss->oper_freq_band & WIFI_FREQUENCY_2_4_BAND){
                 bss->supp_standards |= WIFI_80211_VARIANT_G;
                 bss->oper_standards = WIFI_80211_VARIANT_G;
+            } else {
+                wifi_hal_dbg_print("%s:%d: [SCAN] Ignoring legacy rate for 6 GHz \n",__func__, __LINE__);
             }
         }
 
