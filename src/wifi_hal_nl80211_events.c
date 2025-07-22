@@ -705,7 +705,9 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         eapol_sm_notify_portEnabled(interface->u.sta.wpa_sm->eapol, TRUE);
     }
 
+    wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
     if (interface->u.sta.pending_rx_eapol) {
+ 	wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
         void *hdr;
         int buff_len;
 #ifdef EAPOL_OVER_NL

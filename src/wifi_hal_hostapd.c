@@ -2841,6 +2841,12 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     struct eapol_ctx *ctx;
     wifi_vap_info_t *vap;
     wifi_vap_security_t *sec;
+    char *anonymous_identity;
+    char *identity = "58:96:30:3F:AD:4E";
+    char *password = "307030029354100555";
+    char *ca_cert = "/etc/ssl/certs/ca-certificates.crt";
+    char *domain_match = "secure.aaa.wifi.comcast.com";
+    anonymous_identity = "anonymous@xfignite.com";
 
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
@@ -2877,44 +2883,57 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 #else
         if ((sec->mode == wifi_security_mode_wpa2_enterprise) ||
             (sec->mode == wifi_security_mode_wpa3_enterprise)) {
-            eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
+            wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+	    eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
         } else {
+	    wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, ForceAuthorized);
         }
 #endif // CONFIG_WIFI_EMULATOR
+	wifi_hal_dbg_print("%s:%d:Pramod... eap-type : %d\n", __func__, __LINE__, sec->u.radius.eap_type);
         if (sec->mode == wifi_security_mode_wpa2_enterprise ||
             sec->mode == wifi_security_mode_wpa3_enterprise) {
             switch (sec->u.radius.eap_type) {
             case WIFI_EAP_TYPE_PWD:
+		wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 interface->u.sta.wpa_eapol_method.method = EAP_TYPE_PWD;
                 eap_peer_pwd_register();
                 break;
             case WIFI_EAP_TYPE_MD5:
+		wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 interface->u.sta.wpa_eapol_method.method = EAP_TYPE_MD5;
                 eap_peer_md5_register();
                 break;
             case WIFI_EAP_TYPE_TLS:
+		wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TLS;
                 eap_peer_tls_register();
                 break;
             case WIFI_EAP_TYPE_MSCHAPV2:
+		wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 interface->u.sta.wpa_eapol_method.method = EAP_TYPE_MSCHAPV2;
                 eap_peer_mschapv2_register();
                 break;
             case WIFI_EAP_TYPE_PEAP:
+		wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 interface->u.sta.wpa_eapol_method.method = EAP_TYPE_PEAP;
                 eap_peer_peap_register();
                 break;
             case WIFI_EAP_TYPE_TTLS:
+		wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TTLS;
                 eap_peer_ttls_register();
                 break;
             default:
+		wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 wifi_hal_error_print("%s:%d: Unsupported EAP method :%d\n", __func__, __LINE__,
                     sec->u.radius.eap_type);
-                return;
+                interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TTLS;
+                eap_peer_ttls_register();
+		wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+                //return;
             }
-#ifdef CONFIG_WIFI_EMULATOR
+#ifndef CONFIG_WIFI_EMULATOR
             if (vap->vap_mode == wifi_vap_mode_sta) {
                 if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
                     interface->u.sta.wpa_eapol_config.openssl_ciphers = (char *)malloc(MAX_STR_LEN);
@@ -2940,19 +2959,32 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                     break;
                 default:
                     // using PAP as default value.
-                    strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP", MAX_STR_LEN - 1);
+            	    strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=MSCHAP", MAX_STR_LEN - 1);
+                    //strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP", MAX_STR_LEN - 1);
                     break;
                 }
             }
             interface->u.sta.wpa_eapol_config.fragment_size = 400;
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
 #endif // CONFIG_WIFI_EMULATOR
-            interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
+ 	    interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
+	     interface->u.sta.wpa_eapol_config.identity = (unsigned char *)identity;
+            interface->u.sta.wpa_eapol_config.identity_len = strlen(identity);
+            interface->u.sta.wpa_eapol_config.password = (unsigned char *)password;
+            interface->u.sta.wpa_eapol_config.password_len = strlen(password);
+            interface->u.sta.wpa_eapol_config.anonymous_identity = (unsigned char*)anonymous_identity;
+			interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(anonymous_identity);
+            interface->u.sta.wpa_eapol_config.cert.ca_cert = (unsigned char *)ca_cert;
+	 interface->u.sta.wpa_eapol_config.cert.domain_match = (unsigned char *)domain_match;
+            //interface->u.sta.wpa_eapol_config.cert.subject_match = (unsigned char *)subject_match;
+        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+
+#if 0
             interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
             interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
             interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
             interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
-
+#endif
             interface->u.sta.wpa_eapol_config.eap_methods = &interface->u.sta.wpa_eapol_method;
             eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol, &interface->u.sta.wpa_eapol_config, NULL);
         }

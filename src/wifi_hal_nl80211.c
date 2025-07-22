@@ -8820,7 +8820,9 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         if (data.key_mgmt & WPA_KEY_MGMT_NONE) {
             wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_NONE;
         } else {
-            sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_PSK_SHA256) & data.key_mgmt;
+            sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
+                WPA_KEY_MGMT_PSK_SHA256 ) & data.key_mgmt;
+	    //sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_PSK_SHA256) & data.key_mgmt;
             key_mgmt = pick_akm_suite(sel);
 
             if (key_mgmt == -1) {
@@ -8917,6 +8919,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
         wifi_hal_dbg_print("security mode open:%d encr:%d\n", security->mode, security->encr);
     }
+     wifi_hal_dbg_print("[%s %d] security mode :%d encr:%d\n", __func__, __LINE__, security->mode, security->encr);
 #ifdef EAPOL_OVER_NL
     if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_CONTROL_PORT_FRAME &&
         interface->bss_nl_connect_event_fd >= 0) {
@@ -9091,7 +9094,7 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         }
 
         for (i = 0; i < num_ssid; i++) {
-            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Added scan ssid '%s'\n", __func__, __LINE__, ssid_list[i]);
+            wifi_hal_dbg_print("%s:%d: [SCAN] Added scan ssid '%s'\n", __func__, __LINE__, ssid_list[i]);
             if (nla_put(msg, i + 1, wifi_strnlen(ssid_list[i], SSID_MAX_LEN), ssid_list[i])) {
                 wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (ssid's)\n", __func__, __LINE__);
                 goto failure;
@@ -9132,7 +9135,7 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         wifi_hal_stats_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
         return -1;
     }
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan started successfully\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: [SCAN] scan started successfully\n", __func__, __LINE__);
     return 0;
 
 failure:
