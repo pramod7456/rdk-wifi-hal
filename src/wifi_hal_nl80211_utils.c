@@ -160,7 +160,32 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
 
 #ifdef XLE_PORT // for Broadcom XLE
 
-#ifdef XLE_3_RADIO_SUPPORT
+#if defined (XLE_3_RADIO_SUPPORT) && defined(XLE_BCM_SDK_504L04P3)
+    {1, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
+    {2, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5gl"},
+    {1, 0,  "wl0.2",   "brlan1",  101,    2,      "iot_ssid_2g"},
+    {2, 1,  "wl1.2",   "brlan1",  101,    3,      "iot_ssid_5gl"},
+    {1, 0,  "wl0.3",   "brlan2",  102,    4,      "hotspot_open_2g"},
+    {2, 1,  "wl1.3",   "brlan3",  103,    5,      "hotspot_open_5gl"},
+    {1, 0,  "wl0.4",   "br106",   106,    6,      "lnf_psk_2g"},
+    {2, 1,  "wl1.4",   "br106",   106,    7,      "lnf_psk_5gl"},
+    {1, 0,  "wl0.5",   "brlan4",  104,    8,      "hotspot_secure_2g"},
+    {2, 1,  "wl1.5",   "brlan5",  105,    9,      "hotspot_secure_5gl"},
+    {1, 0,  "wl0.6",   "br106",   106,    10,     "lnf_radius_2g"},
+    {2, 1,  "wl1.6",   "br106",   106,    11,     "lnf_radius_5gl"},
+    {1, 0,  "wl0.7",   "brlan112",112,    12,     "mesh_backhaul_2g"},
+    {2, 1,  "wl1.7",   "brlan113",113,    13,     "mesh_backhaul_5gl"},
+    {1, 0,  "wl0",     "",          0,    14,     "mesh_sta_2g"},
+    {2, 1,  "wl1",     "",          0,    15,     "mesh_sta_5gl"},
+    {0, 2,  "wl2.1",   "brlan0",  100,    16,     "private_ssid_5gh"},
+    {0, 2,  "wl2.2",   "brlan1",  101,    17,     "iot_ssid_5gh"},
+    {0, 2,  "wl2.3",   "brlan3",  103,    18,     "hotspot_open_5gh"},
+    {0, 2,  "wl2.4",   "br106",   106,    19,     "lnf_psk_5gh"},
+    {0, 2,  "wl2.5",   "brlan5",  105,    20,     "hotspot_secure_5gh"},
+    {0, 2,  "wl2.6",   "br106",   106,    21,     "lnf_radius_5gh"},
+    {0, 2,  "wl2.7",   "brlan113",114,    22,     "mesh_backhaul_5gh"},
+    {0, 2,  "wl2",     "",          0,    23,     "mesh_sta_5gh"},
+#elif defined (XLE_3_RADIO_SUPPORT)
     {0, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
     {1, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5gl"},
     {0, 0,  "wl0.2",   "brlan1",  101,    2,      "iot_ssid_2g"},
@@ -4363,29 +4388,20 @@ void init_interface_map(void)
 
 void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_index)
 {
-    unsigned int i;
-    const char *vap_name_str = NULL;
-    const char *suffix = NULL;
-
-    for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
-        if (interface_index_map[i].rdk_radio_index == rdk_radio_index) {
-            wifi_hal_info_print("%s:%d: Found vap_name:%s for rdk_radio_index:%u\n",
-                                __func__, __LINE__, interface_index_map[i].vap_name, rdk_radio_index);
-
-            vap_name_str = interface_index_map[i].vap_name;
-            suffix = strrchr(vap_name_str, '_');
-
-            if (suffix && strlen(suffix + 1) > 0) {
-                strncat((char *)vap_name, suffix + 1, sizeof(wifi_vap_name_t) - strlen(vap_name) - 1);
-                wifi_hal_info_print("%s:%d: Updated vap_name to %s for rdk_radio_index:%u\n",
-                                    __func__, __LINE__, vap_name, rdk_radio_index);
-                return;
-            }
-        }
+    switch (rdk_radio_index) {
+    case 0:
+        strncat((char *)vap_name, "2g", strlen("2g") + 1);
+        break;
+    case 1:
+        strncat((char *)vap_name, "5g", strlen("5g") + 1);
+        break;
+    case 2:
+        strncat((char *)vap_name, "6g", strlen("6g") + 1);
+        break;
+    default:
+        wifi_hal_error_print("%s:%d: Invalid rdk_radio_index:%d for vap_name:%s\n", __func__,
+            __LINE__, rdk_radio_index, vap_name);
     }
-
-    wifi_hal_error_print("%s:%d: Failed to find valid suffix for vap_name:%s "
-                         "for rdk_radio_index:%u\n", __func__, __LINE__, vap_name, rdk_radio_index);
 }
 
 int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
