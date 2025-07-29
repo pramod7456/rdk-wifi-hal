@@ -2839,9 +2839,27 @@ static void wpa_sm_eapol_eap_error_cb(void *ctx, int error_code)
 }
 
 #define MAX_STR_LEN 64
+#define MAX_CMD_LEN 128
+
 #define SUPPORTED_CIPHERS \
         "DEFAULT:@SECLEVEL=0"
 //#define INVALID_ANONYMOUS_IDENTITY_FLAG "/nvram/use_invalid_anonymous_identity"
+#define FACTORY_DEFAULT_FILE "/tmp/factory_nvram.data"
+
+void get_details_from_file(char *input, char *output)
+{
+    FILE *fp = NULL;
+    char cmd[MAX_CMD_LEN] = {'\0'};
+    snprintf(cmd, MAX_CMD_LEN, "grep \"%s\" FACTORY_DEFAULT_FILE | cut -d ' ' -f2", input);
+    wifi_hal_dbg_print("[%s %d] cmd : %s\n", __func__, __LINE__, cmd);
+    fp = popen(cmd,"r");
+    if (fp != NULL) {
+        while (fgets(output, MAX_STR_LEN, fp) != NULL){
+            output[strlen(output) - 1] = '\0';
+        }
+        wifi_hal_dbg_print("[%s %d] %s : %s\n", __func__, __LINE__, input,  output);
+    }
+}
 
 void update_eapol_sm_params(wifi_interface_info_t *interface)
 {
@@ -2849,8 +2867,9 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     wifi_vap_info_t *vap;
     wifi_vap_security_t *sec;
     char *anonymous_identity;
-    char *identity = "58:96:30:3F:AD:4E";
-    char *password = "307030029354100555";
+    
+    //char *identity = "58:96:30:3F:AD:4E";
+    // char *password = "307030029354100555";
     // char *ca_cert = "/etc/ssl/certs/ca-certificates.crt";
     // char *domain_match = "secure.aaa.wifi.comcast.com";
   #if 0
@@ -2860,10 +2879,17 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     to_mac_str(hal_cap.wifi_prop.cm_mac,cm_mac);
     wifi_hal_dbg_print("Pramod device cmmac=%s and serial no=%s\n",cm_mac,hal_cap.wifi_prop.serialNo);
    #endif
+
+    char identity[MAX_STR_LEN] = {'\0'};
+    char password[MAX_STR_LEN] = {'\0'};
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
     anonymous_identity = "anonymous@xfignite.com";
 
+    get_details_from_file("CM", identity);
+    wifi_hal_dbg_print("[%s %d] CM-MAC/Identity updated as %s\n", __func__, __LINE__, identity);
+    get_details_from_file("Serial", password);
+    wifi_hal_dbg_print("[%s %d] Serial/Password updated as %s\n", __func__, __LINE__, password);
 #if 0
     if (access(INVALID_ANONYMOUS_IDENTITY_FLAG, F_OK) == 0) {
         anonymous_identity = "anonymous@comcastbusiness.com";
@@ -2985,17 +3011,19 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
 #endif // CONFIG_WIFI_EMULATOR
             interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
-            interface->u.sta.wpa_eapol_config.identity = (unsigned char *)identity;
-            interface->u.sta.wpa_eapol_config.identity_len = strlen(identity);
-            interface->u.sta.wpa_eapol_config.password = (unsigned char *)password;
-            interface->u.sta.wpa_eapol_config.password_len = strlen(password);
+            //interface->u.sta.wpa_eapol_config.identity = (unsigned char *)identity;
+            strncpy(interface->u.sta.wpa_eapol_config.identity, (unsigned char *)identity, strlen(identity)-1);
+	    interface->u.sta.wpa_eapol_config.identity_len = strlen(identity);
+            //interface->u.sta.wpa_eapol_config.password = (unsigned char *)password;
+            strncpy(interface->u.sta.wpa_eapol_config.password, (unsigned char *)password, strlen(password)-1);
+	    interface->u.sta.wpa_eapol_config.password_len = strlen(password);
             interface->u.sta.wpa_eapol_config.anonymous_identity = (unsigned char*)anonymous_identity;
 	    interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(anonymous_identity);
 
          //   interface->u.sta.wpa_eapol_config.cert.ca_cert = (unsigned char *)ca_cert;
          //   interface->u.sta.wpa_eapol_config.cert.domain_match = (unsigned char *)domain_match;
             //interface->u.sta.wpa_eapol_config.cert.subject_match = (unsigned char *)subject_match;
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d:Pramod identity : [%s %s] password : [%s %s] id-len : %d pwd-len : %d\n", __func__, __LINE__, identity, (char *)interface->u.sta.wpa_eapol_config.identity, password, (char *)interface->u.sta.wpa_eapol_config.password, strlen(identity), strlen(password));
 
             interface->u.sta.wpa_eapol_config.eap_methods = &interface->u.sta.wpa_eapol_method;
             eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol, &interface->u.sta.wpa_eapol_config, NULL);
