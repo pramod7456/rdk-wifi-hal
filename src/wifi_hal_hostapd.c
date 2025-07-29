@@ -2850,7 +2850,7 @@ void get_details_from_file(char *input, char *output)
 {
     FILE *fp = NULL;
     char cmd[MAX_CMD_LEN] = {'\0'};
-    snprintf(cmd, MAX_CMD_LEN, "grep \"%s\" FACTORY_DEFAULT_FILE | cut -d ' ' -f2", input);
+    snprintf(cmd, MAX_CMD_LEN, "grep \"%s\" \"%s\" | cut -d ' ' -f2", input, FACTORY_DEFAULT_FILE);
     wifi_hal_dbg_print("[%s %d] cmd : %s\n", __func__, __LINE__, cmd);
     fp = popen(cmd,"r");
     if (fp != NULL) {
