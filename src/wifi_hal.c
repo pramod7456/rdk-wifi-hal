@@ -1200,6 +1200,19 @@ struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface)
 int deinit_wpa_supplicant(wifi_interface_info_t *interface)
 {
     wifi_hal_info_print("%s:%d: deinit wpa supplicant params\n", __func__, __LINE__);
+    
+    if (interface->u.sta.wpa_eapol_config.identity != NULL) {
+	wifi_hal_info_print("%s:%d: Freeing identity memory\n", __func__, __LINE__);
+	free(interface->u.sta.wpa_eapol_config.identity);
+	interface->u.sta.wpa_eapol_config.identity = NULL;
+    }
+
+    if (interface->u.sta.wpa_eapol_config.password != NULL) {
+	wifi_hal_info_print("%s:%d: Freeing password memory\n", __func__, __LINE__);
+	free(interface->u.sta.wpa_eapol_config.password);
+	interface->u.sta.wpa_eapol_config.password = NULL;
+    }
+
     if (interface->wpa_s.p2pdev != NULL) {
         free(interface->wpa_s.p2pdev);
         interface->wpa_s.p2pdev = NULL;
