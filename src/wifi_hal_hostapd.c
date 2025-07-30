@@ -3022,7 +3022,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 		    }
 		    memset(interface->u.sta.wpa_eapol_config.identity, '\0', MAX_STR_LEN);
 		    wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
-		    strncpy(interface->u.sta.wpa_eapol_config.identity, (unsigned char *)identity, strlen(identity)-1);
+		    strncpy(interface->u.sta.wpa_eapol_config.identity, (unsigned char *)identity, MAX_STR_LEN - 1);
 		    wifi_hal_dbg_print("%s:%d:Pramod identity : [%s %s] id-len : %d\n", __func__, __LINE__, identity, (char *)interface->u.sta.wpa_eapol_config.identity, strlen(identity));
 	    }
             wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
@@ -3037,7 +3037,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 		    }
 		    memset(interface->u.sta.wpa_eapol_config.password, '\0', MAX_STR_LEN);
 		    wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
-		    strncpy(interface->u.sta.wpa_eapol_config.password, (unsigned char *)password, strlen(password)-1);
+		    strncpy(interface->u.sta.wpa_eapol_config.password, (unsigned char *)password, MAX_STR_LEN - 1);
                     wifi_hal_dbg_print("%s:%d:Pramod password : [%s %s]  pwd-len : %d\n", __func__, __LINE__, password, (char *)interface->u.sta.wpa_eapol_config.password, strlen(password));
 	    }
             wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
