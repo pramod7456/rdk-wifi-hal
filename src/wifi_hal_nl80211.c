@@ -8637,6 +8637,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             __LINE__, security->encr);
         return -1;
     }
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
 
     update_wpa_sm_params(interface);
     init_wpa_sm_param(interface);
@@ -8787,8 +8788,11 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         interface->u.sta.pending_rx_eapol = false;
     }
     // EAPOL states should be initialised before sending CMD_CONNECT
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
     update_wpa_sm_params(interface);
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
     update_eapol_sm_params(interface);
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
     eapol_sm_notify_portEnabled(interface->u.sta.wpa_sm->eapol, FALSE);
     eapol_sm_notify_portValid(interface->u.sta.wpa_sm->eapol, FALSE);
 
@@ -8803,6 +8807,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     nla_put(msg, NL80211_ATTR_SSID, strlen(backhaul->ssid), backhaul->ssid);
     nla_put(msg, NL80211_ATTR_MAC, sizeof(backhaul->bssid), backhaul->bssid);
     nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, backhaul->freq);
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
 
     pos = rsn_ie;
 
@@ -8918,14 +8923,17 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 #ifdef EAPOL_OVER_NL
     if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_CONTROL_PORT_FRAME &&
         interface->bss_nl_connect_event_fd >= 0) {
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
         ret = nl80211_set_rx_control_port_owner(msg, interface);
     } else {
 #endif
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
         ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
 #ifdef EAPOL_OVER_NL
     }
 #endif
     if (ret == 0) {
+        wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
         return 0;
     }
 #endif /* CONFIG_WIFI_EMULATOR || BANANA_PI_PORT*/

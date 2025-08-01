@@ -1051,26 +1051,31 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
     bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     wifi_bss_info_t *backhaul, *tmp = NULL, *best = NULL;
     int best_rssi = -100;
-
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
     NULL_PTR_ASSERT(bss);
 
     if ((interface = get_interface_by_vap_index(ap_index)) == NULL) {
         wifi_hal_error_print("%s:%d:interface for ap index:%d not found\n", __func__, __LINE__, ap_index);
         return RETURN_ERR;
     }
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
 
     vap = &interface->vap_info;
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
     if (vap->vap_mode != wifi_vap_mode_sta) {
         wifi_hal_error_print("%s:%d:interface for vap index:%d not found\n", __func__, __LINE__, vap->vap_index);
         return WIFI_HAL_INVALID_ARGUMENTS;    // RDKB-45724 - Returns -4 when the ap index is not suitable for station mode
     }
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
 
     backhaul = &interface->u.sta.backhaul;
 
     if ((bss != NULL) && (memcmp(null_mac, bss->bssid, sizeof(bssid_t)) != 0)) {
+        wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
         memcpy(backhaul, bss, sizeof(wifi_bss_info_t));
     } else {
         // find from scan list
+        wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
         pthread_mutex_lock(&interface->scan_info_mutex);
         tmp = hash_map_get_first(interface->scan_info_map);
         while (tmp != NULL) {
@@ -1081,6 +1086,7 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
             }
             tmp = hash_map_get_next(interface->scan_info_map, tmp);
         }
+        wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
 
         if (best == NULL) {
             pthread_mutex_unlock(&interface->scan_info_mutex);
@@ -1090,10 +1096,14 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
 
         *backhaul = *best;
         pthread_mutex_unlock(&interface->scan_info_mutex);
+         wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
     }
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
     if (nl80211_connect_sta(interface) != 0) {
+        wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
         return RETURN_ERR;
     }
+    wifi_hal_error_print("%s:%d:[PRAMOD]\n", __func__, __LINE__);
 
     return RETURN_OK;
 }
