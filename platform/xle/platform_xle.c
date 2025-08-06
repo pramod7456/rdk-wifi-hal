@@ -83,53 +83,56 @@ static void set_wl_runtime_configs(const wifi_vap_info_map_t *vap_map)
 }
 
 /* Get default encrypted PSK key. */
-static int get_default_encrypted_password (char* password) {
-
+static int get_default_encrypted_password(char *password)
+{
     if (NULL == password) {
         wifi_hal_error_print("%s:%d Invalid parameter \r\n", __func__, __LINE__);
         return -1;
     }
 
-    const char* default_pwd_encrypted_key = "onewifidefaultcred";
-    uint8_t    *encrypted_key=NULL;
+    const char *default_pwd_encrypted_key = "onewifidefaultcred";
+    char *encrypted_key = NULL;
     size_t encrypted_keysize;
-    if(rdkconfig_get(&encrypted_key, &encrypted_keysize, default_pwd_encrypted_key))
-    {
+
+    if (rdkconfig_getStr(&encrypted_key, &encrypted_keysize, default_pwd_encrypted_key) !=
+        RDKCONFIG_OK) {
         wifi_hal_error_print("%s:%d Extraction failure for onewifi value \r\n", __func__, __LINE__);
         return -1;
     }
 
-    strncpy(password, (const char*)encrypted_key, BUFLEN_128 - 1);
+    strncpy(password, (const char *)encrypted_key, BUFLEN_128 - 1);
     password[BUFLEN_128 - 1] = '\0';
 
-    if(rdkconfig_free(&encrypted_key, encrypted_keysize)  == RDKCONFIG_FAIL) {
-        wifi_hal_info_print("%s:%d Memory deallocation for onewifi value failed \r\n", __func__, __LINE__);
+    if (rdkconfig_freeStr(&encrypted_key, encrypted_keysize) == RDKCONFIG_FAIL) {
+        wifi_hal_info_print("%s:%d Memory deallocation for onewifi value failed \r\n", __func__,
+            __LINE__);
     }
     return 0;
 }
 
 /* Get default encrypted SSID. */
-static int get_default_encrypted_ssid (char* ssid) {
+static int get_default_encrypted_ssid(char *ssid)
+{
 
     if (NULL == ssid) {
         wifi_hal_error_print("%s:%d Invalid parameter \r\n", __func__, __LINE__);
         return -1;
     }
 
-    const char* default_ssid_encrypted_key = "onewifidefaultssid";
-    uint8_t    *ssid_key=NULL;
+    const char *default_ssid_encrypted_key = "onewifidefaultssid";
+    char *ssid_key = NULL;
     size_t ssid_keysize;
-    if(rdkconfig_get(&ssid_key, &ssid_keysize, default_ssid_encrypted_key))
-    {
+    if (rdkconfig_getStr(&ssid_key, &ssid_keysize, default_ssid_encrypted_key) != RDKCONFIG_OK) {
         wifi_hal_error_print("%s:%d Extraction failure for onewifi value \r\n", __func__, __LINE__);
         return -1;
     }
 
-    strncpy(ssid, (const char*)ssid_key, BUFLEN_128 -1);
+    strncpy(ssid, (const char *)ssid_key, BUFLEN_128 - 1);
     ssid[BUFLEN_128 - 1] = '\0';
 
-    if(rdkconfig_free(&ssid_key, ssid_keysize)  == RDKCONFIG_FAIL) {
-        wifi_hal_info_print("%s:%d Memory deallocation for onewifi value failed \r\n", __func__, __LINE__);
+    if (rdkconfig_freeStr(&ssid_key, ssid_keysize) == RDKCONFIG_FAIL) {
+        wifi_hal_info_print("%s:%d Memory deallocation for onewifi value failed \r\n", __func__,
+            __LINE__);
     }
     return 0;
 }
@@ -262,9 +265,9 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
 
 static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable)
 {
-    int assoc_ctrl;
-    char buf[128] = {0};
-    char interface_name[8] = {0};
+    int assoc_ctrl, curr_assoc_ctrl;
+    char buf[128] = { 0 };
+    char interface_name[8] = { 0 };
     struct maclist *maclist = (struct maclist *)buf;
 
     if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
@@ -317,10 +320,22 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         assoc_ctrl = ASSOC_DRIVER_CTRL;
     }
 
+    if (wl_iovar_getint(interface_name, "split_assoc_req", &curr_assoc_ctrl) < 0) {
+        wifi_hal_error_print("%s:%d failed to get split_assoc_req for %s, err: %d (%s)\n", __func__,
+            __LINE__, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    if (assoc_ctrl == curr_assoc_ctrl) {
+        return RETURN_OK;
+    }
+
+    wifi_hal_info_print("%s:%d Set interface %s down-up to change split assoc\n", __func__,
+        __LINE__, interface_name);
     if (wl_ioctl(interface_name, WLC_DOWN, NULL, 0) < 0) {
-         wifi_hal_error_print("%s:%d failed to set interface down for %s, err: %d (%s)\n", __func__,
-             __LINE__, interface_name, errno, strerror(errno));
-         return RETURN_ERR;
+        wifi_hal_error_print("%s:%d failed to set interface down for %s, err: %d (%s)\n", __func__,
+            __LINE__, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
     }
 
     if (wl_iovar_set(interface_name, "split_assoc_req", &assoc_ctrl, sizeof(assoc_ctrl)) < 0) {
@@ -330,9 +345,9 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
     }
 
     if (wl_ioctl(interface_name, WLC_UP, NULL, 0) < 0) {
-         wifi_hal_error_print("%s:%d failed to set interface up for %s, err: %d (%s)\n", __func__,
-             __LINE__, interface_name, errno, strerror(errno));
-         return RETURN_ERR;
+        wifi_hal_error_print("%s:%d failed to set interface up for %s, err: %d (%s)\n", __func__,
+            __LINE__, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
     }
 
     return RETURN_OK;
@@ -748,14 +763,14 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
 {
     // Set values from driver beacon, NL values are not valid.
     // SCS bit is not set in driver
-    static const u8 ext_cap[] = { 0x85, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x40, 0x00, 0x00,
+    static const u8 ext_cap[] = { 0x85, 0x00, 0x08, 0x82, 0x01, 0x00, 0x40, 0x40, 0x00, 0x40,
         0x20 };
-    static const u8 ht_mcs[16] = { 0xff, 0xff, 0xff, 0xff };
+    static const u8 ht_mcs[16] = { 0xff, 0xff, 0x00, 0x00 };
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
-    static const u8 he_mcs[HE_MAX_MCS_CAPAB_SIZE] = { 0xaa, 0xff, 0xaa, 0xff };
-    static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x1b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
-    static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x0f, 0x03, 0x95,
-        0x18, 0x00, 0xcc, 0x00 };
+    static const u8 he_mcs[HE_MAX_MCS_CAPAB_SIZE] = { 0xfa, 0xff, 0xfa, 0xff };
+    static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x19, 0x1c, 0xc7, 0x71 };
+    static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x0f, 0x01, 0x95,
+        0x08, 0x00, 0xcc, 0x00 };
     struct hostapd_iface *iface = &interface->u.ap.iface;
 
     radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
@@ -787,20 +802,76 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     }
 }
 
-static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
+static void platform_get_radio_caps_5gl(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
+    struct hostapd_iface *iface = &interface->u.ap.iface;
+
+    static const u8 ext_cap[] = { 0x84, 0x00, 0x08, 0x82, 0x01, 0x00, 0x40, 0x40, 0x00, 0x40,
+    0x20 };
+    static const u8 ht_mcs[16] = { 0xff, 0xff, 0x00, 0x00 };
+    static const u8 vht_mcs[8] = { 0xfa, 0xff, 0x00, 0x00, 0xfa, 0xff, 0x00, 0x20 };
+    static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
+    static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x44, 0x20, 0x02, 0xc0, 0x0f, 0x01, 0x95,
+    0x10, 0x00, 0xcc, 0x00 };
+    static const u8 he_mcs[HE_MAX_MCS_CAPAB_SIZE] = { 0xfa, 0xff, 0xfa, 0xff, 0x00, 0x00, 0x00, 0x00 };
+    static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x79, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
+
+    radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD | WPA_DRIVER_FLAGS_DFS_OFFLOAD;
+
+    free(radio->driver_data.extended_capa);
+    radio->driver_data.extended_capa = malloc(sizeof(ext_cap));
+    memcpy(radio->driver_data.extended_capa, ext_cap, sizeof(ext_cap));
+    free(radio->driver_data.extended_capa_mask);
+    radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
+    memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
+    radio->driver_data.extended_capa_len = sizeof(ext_cap);
+
+    for (int i = 0; i < iface->num_hw_features; i++) {
+        iface->hw_features[i].ht_capab = 0x09ef;
+        iface->hw_features[i].a_mpdu_params &= ~(0x07 << 2);
+        iface->hw_features[i].a_mpdu_params |= 0x05 << 2;
+        memcpy(iface->hw_features[i].mcs_set, ht_mcs, sizeof(ht_mcs));
+        iface->hw_features[i].vht_capab = 0x0f8979b1;
+        memcpy(iface->hw_features[i].vht_mcs_set, vht_mcs, sizeof(vht_mcs));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mac_cap, he_mac_cap,
+            sizeof(he_mac_cap));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].phy_cap, he_phy_cap,
+            sizeof(he_phy_cap));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mcs, he_mcs, sizeof(he_mcs));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].ppet, he_ppet, sizeof(he_ppet));
+
+        for (int ch = 0; ch < iface->hw_features[i].num_channels; ch++) {
+            if (iface->hw_features[i].channels[ch].flag & HOSTAPD_CHAN_RADAR) {
+                iface->hw_features[i].channels[ch].max_tx_power = 24; // dBm
+            } else {
+                iface->hw_features[i].channels[ch].max_tx_power = 30; // dBm
+            }
+
+            /* Re-enable DFS channels disabled due to missing WPA_DRIVER_FLAGS_DFS_OFFLOAD flag */
+            if (iface->hw_features[i].channels[ch].flag & HOSTAPD_CHAN_DISABLED &&
+                iface->hw_features[i].channels[ch].flag & HOSTAPD_CHAN_RADAR) {
+                iface->hw_features[i].channels[ch].flag &= ~HOSTAPD_CHAN_DISABLED;
+            }
+        }
+    }
+
+}
+
+static void platform_get_radio_caps_5gh(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
+{
+    struct hostapd_iface *iface = &interface->u.ap.iface;
+
     static const u8 ext_cap[] = { 0x84, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x40, 0x00, 0x40,
-        0x20 };
+    0x20 };
     static const u8 ht_mcs[16] = { 0xff, 0xff, 0xff, 0xff };
     static const u8 vht_mcs[8] = { 0xaa, 0xff, 0x00, 0x00, 0xaa, 0xff, 0x00, 0x20 };
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
+    static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x02, 0x1b, 0x95,
+    0x00, 0x00, 0xcc, 0x00 };
     static const u8 he_mcs[HE_MAX_MCS_CAPAB_SIZE] = { 0xaa, 0xff, 0xaa, 0xff, 0xaa, 0xff, 0xaa,
-        0xff };
+    0xff };
     static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x7b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71,
-        0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
-    static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x6f, 0x1b, 0x95,
-        0x18, 0x00, 0xcc, 0x00 };
-    struct hostapd_iface *iface = &interface->u.ap.iface;
+    0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
 
     radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD | WPA_DRIVER_FLAGS_DFS_OFFLOAD;
 
@@ -817,7 +888,7 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
         iface->hw_features[i].a_mpdu_params &= ~(0x07 << 2);
         iface->hw_features[i].a_mpdu_params |= 0x05 << 2;
         memcpy(iface->hw_features[i].mcs_set, ht_mcs, sizeof(ht_mcs));
-        iface->hw_features[i].vht_capab = 0x0f8b69b5;
+        iface->hw_features[i].vht_capab = 0x0f8b69b6;
         memcpy(iface->hw_features[i].vht_mcs_set, vht_mcs, sizeof(vht_mcs));
         memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mac_cap, he_mac_cap,
             sizeof(he_mac_cap));
@@ -867,9 +938,10 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 
         if (strstr(interface->vap_info.vap_name, "2g")) {
             platform_get_radio_caps_2g(radio, interface);
-        } else if (strstr(interface->vap_info.vap_name, "5gl") ||
-                   strstr(interface->vap_info.vap_name, "5gh")) {
-            platform_get_radio_caps_5g(radio, interface);
+        } else if (strstr(interface->vap_info.vap_name, "5gl")) {
+            platform_get_radio_caps_5gl(radio, interface);
+        } else if (strstr(interface->vap_info.vap_name, "5gh")) {
+            platform_get_radio_caps_5gh(radio, interface);
         } else {
             wifi_hal_error_print("%s:%d: unknown interface %s\n", __func__, __LINE__,
                 interface->vap_info.vap_name);
