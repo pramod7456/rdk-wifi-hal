@@ -1608,6 +1608,13 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
             }
+            wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
+                interface->name, vap->bridge_name);
+            if (nl80211_interface_enable(vap->bridge_name, true) != 0) {
+                wifi_hal_error_print("%s:%d: interface:%s failed to set bridge %s up\n",
+                        __func__, __LINE__, interface->name, vap->bridge_name);
+           //     continue;
+            }
 	    nl80211_interface_enable(interface->name, false);
             nl80211_set_mac(interface);
             interface->vap_initialized = true;
