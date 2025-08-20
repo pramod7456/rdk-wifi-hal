@@ -3830,16 +3830,11 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
     char ovs_brname[IFNAMSIZ];
     bool is_hotspot_interface = false, is_lnf_psk_interface = false;
     bool is_mdu_enabled = false;
-    bool is_mesh_sta_interface = false;
     wifi_vap_info_t *vap_cfg = NULL;
 #if defined(VNTXER5_PORT)
     int ap_index;
 #endif
     is_hotspot_interface = is_wifi_hal_vap_hotspot_from_interfacename(if_name);
-    if (strcmp(br_name, "brww0") == 0) {
-        wifi_hal_info_print("%s:%d:br-name : %s\n", __func__, __LINE__, br_name);
-	is_mesh_sta_interface = 1;
-    }
     vap_cfg = get_wifi_vap_info_from_interfacename(if_name);
     if (vap_cfg) {
         is_lnf_psk_interface = is_wifi_hal_vap_lnf_psk(vap_cfg->vap_index);
@@ -3853,9 +3848,9 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
     }
 #endif
 
-    wifi_hal_info_print("%s:%d: bridge:%s interface:%s is hotspot:%d is lnf_psk:%d is_mesh_sta:%d is_mdu_enabled:%d vap_name = %s\n", __func__, __LINE__, br_name, if_name, is_hotspot_interface, is_lnf_psk_interface, is_mesh_sta_interface, is_mdu_enabled, (vap_cfg != NULL)? vap_cfg->vap_name: "NULL");
+    wifi_hal_info_print("%s:%d: bridge:%s interface:%s is hotspot:%d is lnf_psk:%d is_mdu_enabled:%d vap_name = %s\n", __func__, __LINE__, br_name, if_name, is_hotspot_interface, is_lnf_psk_interface, is_mdu_enabled, (vap_cfg != NULL)? vap_cfg->vap_name: "NULL");
 
-    if (access(OVS_MODULE, F_OK) == 0 && !is_hotspot_interface && !is_mesh_sta_interface && !(is_lnf_psk_interface && is_mdu_enabled)) {
+    if (access(OVS_MODULE, F_OK) == 0 && !is_hotspot_interface && !(is_lnf_psk_interface && is_mdu_enabled)) {
         wifi_hal_dbg_print("%s:%d\n", __func__, __LINE__);
         if (ovs_if_get_br(ovs_brname, if_name) == 0) {
             wifi_hal_dbg_print("%s:%d\n", __func__, __LINE__);
@@ -3889,7 +3884,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
         return 0;
     }
 
-    if(is_lnf_psk_interface && is_mesh_sta_interface && vap_cfg && is_mdu_enabled && (ovs_if_get_br(ovs_brname,if_name) == 0)) {
+    if(is_lnf_psk_interface && vap_cfg && is_mdu_enabled && (ovs_if_get_br(ovs_brname,if_name) == 0)) {
         int status = nl80211_remove_from_bridge(if_name);
         wifi_hal_info_print("%s:%d is_lnf_psk_interface && mdu_enabled for LnF interface:%s and have called the nl80211_remove_from_bridge from ovs_brname:%s with return status %d\n",  __func__, __LINE__, if_name,ovs_brname, status);
     }
@@ -14626,7 +14621,8 @@ int wifi_drv_set_operstate(void *priv, int state)
     }
 
     if (vap->vap_mode != wifi_vap_mode_monitor) {
-        // Both STAs and APs can register for management frames but not spurious frames
+        wifi_hal_dbg_print("%s:%d: Registering for management frames\n", __func__, __LINE__);
+	// Both STAs and APs can register for management frames but not spurious frames
         if (nl80211_register_mgmt_frames(interface) != 0) {
             wifi_hal_error_print("%s:%d: Failed to register for management frames\n", __func__, __LINE__);
             return -1;
@@ -14646,6 +14642,8 @@ int wifi_drv_set_operstate(void *priv, int state)
     }
 #ifndef EAPOL_OVER_NL
 #ifndef CONFIG_WIFI_EMULATOR
+    wifi_hal_dbg_print("%s:%d\n", __func__, __LINE__);
+
     if (vap->vap_mode == wifi_vap_mode_ap) {
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
         if (sock_fd < 0) {
@@ -14660,6 +14658,7 @@ int wifi_drv_set_operstate(void *priv, int state)
         }
     }
 #else
+    wifi_hal_dbg_print("%s:%d\n", __func__, __LINE__);
     if ((interface->vap_configured == true)  && (vap->vap_mode == wifi_vap_mode_sta)) {
 	 if (interface->u.sta.sta_sock_fd != 0) {
              close(interface->u.sta.sta_sock_fd);
@@ -14673,11 +14672,16 @@ int wifi_drv_set_operstate(void *priv, int state)
     }
 #endif
 
+#if 0
 #ifdef CONFIG_WIFI_EMULATOR
     ifname = vap->bridge_name;
 #else
     ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
 #endif
+#endif
+    wifi_hal_dbg_print("%s:%d br-name : %s\n", __func__, __LINE__, vap->bridge_name);
+    ifname = vap->bridge_name;
+    wifi_hal_dbg_print("%s:%d br-name : %s if-name : %s\n", __func__, __LINE__, vap->bridge_name, ifname);
     memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
     sockaddr.sll_family   = AF_PACKET;
     sockaddr.sll_ifindex  = if_nametoindex(ifname);
@@ -14691,6 +14695,7 @@ int wifi_drv_set_operstate(void *priv, int state)
         }
     } else {
 #ifndef CONFIG_WIFI_EMULATOR
+        wifi_hal_dbg_print("%s:%d\n", __func__, __LINE__);
         sockaddr.sll_protocol = htons(ETH_P_EAPOL);
 #else
         sockaddr.sll_protocol = htons(ETH_P_ALL);
@@ -14710,6 +14715,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     }
 
 #else
+    wifi_hal_dbg_print("%s:%d\n", __func__, __LINE__);
     if (vap->vap_mode == wifi_vap_mode_sta) {
         if (nl80211_register_bss_frames(interface) != 0) {
             wifi_hal_error_print("%s:%d: Failed to register for bss frames\n", __func__, __LINE__);

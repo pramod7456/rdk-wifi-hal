@@ -1603,6 +1603,15 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             //XXX set correct status after reconfigure and call conn status callback
             //nl80211_start_scan(interface);
             interface->vap_initialized = true;
+	    wifi_hal_error_print("%s:%d:iface-name : %s bridge-name : %s\n", __func__, __LINE__, interface->name, vap->bridge_name);
+	    if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
+                wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
+                        __func__, __LINE__, interface->name, vap->bridge_name);
+            }
+	    nl80211_interface_enable(interface->name, false);
+            nl80211_set_mac(interface);
+            interface->vap_initialized = true;
+            nl80211_interface_enable(interface->name, true);
 
 #ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
             nl80211_interface_enable(interface->name, false);
@@ -1613,6 +1622,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
                     __LINE__, interface->name);
                 wifi_drv_set_operstate(interface, 1);
+                nl80211_interface_enable(interface->name, true);
 #ifdef TARGET_GEMINI7_2
 		if (!vap->u.sta_info.enabled) {
                     nl80211_delete_interface(radio->index, interface->name, interface->index);
