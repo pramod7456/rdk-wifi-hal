@@ -36,8 +36,9 @@
 #include "hostapd/eap_register.h"
 #include "ap/rrm.h"
 #include "ap/neighbor_db.h"
-
+#ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
+#endif
 #ifdef BANANA_PI_PORT
 #include "wpa_supplicant/config.h"
 #endif
@@ -100,9 +101,9 @@
 static int g_fd_arr[MAX_VAP] = {0};
 static int g_IfIdx_arr[MAX_VAP] = {0};
 static unsigned char g_vapSmac[MAX_VAP][MAC_ADDRESS_LEN] = {'\0'};
-//#ifndef CONFIG_WIFI_EMULATOR
+#ifdef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
-//#endif
+#endif
 
 #if !defined(CMXB7_PORT)
 wifi_hal_priv_t g_wifi_hal;
@@ -1191,7 +1192,7 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
     return RETURN_OK;
 }
 
-#if  !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if  defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface)
 {
     return &interface->current_ssid_info;
@@ -1673,7 +1674,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             }
         }
-#if  !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if  defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         //Init wpa-supplicant params.
         if (vap->vap_mode == wifi_vap_mode_sta) {
             deinit_wpa_supplicant(interface);

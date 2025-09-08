@@ -2242,7 +2242,7 @@ exit:
     return ret;
 }
 
-#if !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 static enum wpa_states wpa_sm_supplicant_sta_get_state(void *ctx)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
@@ -2590,7 +2590,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         ctx->set_state = wpa_sm_sta_set_state;
         ctx->get_state = wpa_sm_sta_get_state;
         ctx->cancel_auth_timeout = wpa_sm_sta_cancel_auth_timeout;
-#if !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT) //DL-CHECK
         if((sec->mode == wifi_security_mode_wpa3_personal) || (sec->mode == wifi_security_mode_wpa3_enterprise) ||
                 (sec->mode == wifi_security_mode_wpa3_transition) || (sec->mode == wifi_security_mode_wpa3_compatibility)) {
             ctx->get_state = wpa_sm_supplicant_sta_get_state;
@@ -2610,7 +2610,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 
         interface->u.sta.wpa_sm = wpa_sm_init(ctx);
     }
-#if !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     interface->wpa_s.wpa = interface->u.sta.wpa_sm;
 #ifdef CONFIG_IEEE80211W
     unsigned int ieee80211w;
@@ -2893,7 +2893,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 
         wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
         interface->u.sta.wpa_sm->eapol = eapol_sm_init(ctx);
-#if !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         interface->wpa_s.wpa->eapol = interface->u.sta.wpa_sm->eapol;
         interface->wpa_s.eapol = interface->u.sta.wpa_sm->eapol;
 #endif
@@ -2948,7 +2948,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 eap_peer_ttls_register();
                 //return;
             }
-#ifndef CONFIG_WIFI_EMULATOR
+#ifndef CONFIG_WIFI_EMULATOR //DL-CHECK
             if (vap->vap_mode == wifi_vap_mode_sta) {
                 wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {

@@ -8767,8 +8767,11 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             os_strlen(interface->wpa_s.current_ssid->sae_password),
             interface->wpa_s.current_ssid->sae_password_id);
     }
-
+#ifdef CONFIG_WIFI_EMULATOR
     interface->wpa_s.driver = &g_wpa_supplicant_driver_nl80211_ops;
+#else
+    interface->wpa_s.driver = &g_wpa_driver_nl80211_ops;
+#endif
     memcpy(interface->wpa_s.conf->ssid, interface->wpa_s.current_ssid, sizeof(struct wpa_ssid));
     memcpy(interface->wpa_s.bssid, backhaul->bssid, ETH_ALEN);
     dl_list_add(&interface->wpa_s.bss, &interface->wpa_s.current_bss->list);
@@ -14819,7 +14822,7 @@ int wifi_drv_get_ssid(void *priv, u8 *ssid)
 #endif
 }
 
-//#if !defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 int wifi_supplicant_drv_associate(void *priv, struct wpa_driver_associate_params *params)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
@@ -14888,7 +14891,7 @@ int wifi_supplicant_drv_associate(void *priv, struct wpa_driver_associate_params
 
     return -1;
 }
-//#endif // CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
+#endif // CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
 
 int wifi_supplicant_drv_authenticate(void *priv, struct wpa_driver_auth_params *params)
 {
@@ -17093,7 +17096,7 @@ int wifi_drv_get_sta_auth_type(void *priv, const u8 *addr, int auth_key,int fram
 const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .name = "nl80211",
     .desc = "Linux nl80211/cfg80211",
-#if defined(BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     .get_bssid = wifi_supplicant_drv_get_bssid,
 #else
     .get_bssid = wifi_drv_get_bssid,
@@ -17106,7 +17109,7 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .get_scan_results2 = wifi_drv_get_scan_results,
     .abort_scan = wifi_drv_abort_scan,
     .deauthenticate = wifi_drv_deauthenticate,
-#if defined(BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     .authenticate = wifi_supplicant_drv_authenticate,
     .associate = wifi_supplicant_drv_associate,
 #else
@@ -17273,7 +17276,7 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
 #endif /* HOSTAPD_VERSION >= 210 */
 };
 
-//#ifndef CONFIG_WIFI_EMULATOR
+#ifdef CONFIG_WIFI_EMULATOR
 const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops = {
     .name = "nl80211",
     .desc = "Linux nl80211/cfg80211",
