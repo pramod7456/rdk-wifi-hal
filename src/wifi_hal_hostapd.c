@@ -2950,7 +2950,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
         eapol_sm_notify_eap_fail(interface->u.sta.wpa_sm->eapol, 0);
 #ifndef CONFIG_WIFI_EMULATOR
         wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
-        /* Ensure the state machine is set to DISCONNECTED to prevent DHCP RX packets from being
+       /* Ensure the state machine is set to DISCONNECTED to prevent DHCP RX packets from being
          * dropped */
         eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
 #else
@@ -2963,7 +2963,8 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, ForceAuthorized);
         }
 #endif // CONFIG_WIFI_EMULATOR
-        if (sec->mode == wifi_security_mode_wpa2_enterprise ||
+        wifi_hal_dbg_print("[%s %d] Mode : %d type : %d phase : %d\n", __func__,__LINE__, sec->mode, sec->u.radius.eap_type,sec->u.radius.phase2);
+	if (sec->mode == wifi_security_mode_wpa2_enterprise ||
             sec->mode == wifi_security_mode_wpa3_enterprise) {
             switch (sec->u.radius.eap_type) {
             case WIFI_EAP_TYPE_PWD:
@@ -2993,8 +2994,6 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             default:
                 wifi_hal_error_print("%s:%d: Unsupported EAP method :%d\n", __func__, __LINE__,
                     sec->u.radius.eap_type);
-                interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TTLS;
-                eap_peer_ttls_register();
                 //return;
             }
 #ifndef CONFIG_WIFI_EMULATOR //DL-CHECK
@@ -3018,6 +3017,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                     }
                 }
                 memset(interface->u.sta.wpa_eapol_config.phase2, 0, MAX_STR_LEN);
+		wifi_hal_dbg_print("%s:%d: phase2 : %d\n", __func__, __LINE__, sec->u.radius.phase2);
                 switch (sec->u.radius.phase2) {
                 case WIFI_EAP_PHASE2_PAP:
                     strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP", MAX_STR_LEN - 1);
@@ -3025,8 +3025,8 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 default:
                     // using PAP as default value.
                     wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
-                    strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=MSCHAP", MAX_STR_LEN - 1);
-                    break;
+                    strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP", MAX_STR_LEN - 1);
+		    break;
                 }
             }
             interface->u.sta.wpa_eapol_config.fragment_size = 400;
