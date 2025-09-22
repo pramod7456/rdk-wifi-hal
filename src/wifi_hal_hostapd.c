@@ -2839,9 +2839,69 @@ static void wpa_sm_eapol_eap_error_cb(void *ctx, int error_code)
 }
 
 #define MAX_STR_LEN 64
+#define MAX_CMD_LEN 128
 #define SUPPORTED_CIPHERS \
         "DEFAULT:@SECLEVEL=0"
-//#define INVALID_ANONYMOUS_IDENTITY_FLAG "/nvram/use_invalid_anonymous_identity"
+#define FACTORY_DEFAULT_FILE "/tmp/factory_nvram.data"
+
+#if 0
+void get_details_from_file(char *input, char *output)
+{
+    FILE *fp = NULL;
+    char cmd[MAX_CMD_LEN] = {'\0'};
+    snprintf(cmd, MAX_CMD_LEN, "grep \"%s\" \"%s\" | cut -d ' ' -f2", input, FACTORY_DEFAULT_FILE);
+    wifi_hal_dbg_print("[%s %d] cmd : %s\n", __func__, __LINE__, cmd);
+    fp = popen(cmd,"r");
+    if (fp != NULL) {
+        while (fgets(output, MAX_STR_LEN, fp) != NULL){
+            output[strlen(output) - 1] = '\0';
+        }
+        wifi_hal_dbg_print("[%s %d] %s : %s\n", __func__, __LINE__, input,  output);
+    }
+}
+#endif
+
+void get_details_from_file(const char *input, char *output)
+{
+    FILE *fp = NULL;
+    char line[MAX_STR_LEN] = {0};
+
+    if (!input) {
+        wifi_hal_error_print("[%s %d] Input NULL\n", __func__, __LINE__);
+	return;
+    }
+
+    fp = fopen(FACTORY_DEFAULT_FILE, "r");
+    if (fp == NULL) {
+        wifi_hal_dbg_print("[%s %d] Failed to open %s\n",
+                           __func__, __LINE__, FACTORY_DEFAULT_FILE);
+        return;
+    }
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        char key[MAX_STR_LEN] = {0};
+        char value[MAX_STR_LEN] = {0};
+
+        // remove trailing newline
+        line[strcspn(line, "\n")] = 0;
+
+	wifi_hal_dbg_print("[%s %d] line : %s\n", __func__, __LINE__, line);
+        // split into "key value"
+        if (sscanf(line, "%s %s", key, value) == 2) {
+	    wifi_hal_dbg_print("[%s %d] key : %s value : %s\n", __func__, __LINE__, key, value);
+            if (strcmp(key, input) == 0) {
+                strncpy(output, value, MAX_STR_LEN - 1);
+                output[MAX_STR_LEN - 1] = '\0';
+                wifi_hal_dbg_print("[%s %d] %s : %s\n",
+                                   __func__, __LINE__, key, output);
+                break;
+            }
+        }
+    }
+
+    fclose(fp);
+    fp = NULL;
+}
 
 void update_eapol_sm_params(wifi_interface_info_t *interface)
 {
@@ -2849,28 +2909,17 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     wifi_vap_info_t *vap;
     wifi_vap_security_t *sec;
     char *anonymous_identity;
-    char *identity = "58:96:30:3F:AD:4E";
-    char *password = "307030029354100555";
-    // char *ca_cert = "/etc/ssl/certs/ca-certificates.crt";
-    // char *domain_match = "secure.aaa.wifi.comcast.com";
-  #if 0
-    wifi_hal_capability_t hal_cap;
-    mac_addr_str_t cm_mac;
-    wifi_hal_getHalCapability(&hal_cap);
-    to_mac_str(hal_cap.wifi_prop.cm_mac,cm_mac);
-    wifi_hal_dbg_print("Pramod device cmmac=%s and serial no=%s\n",cm_mac,hal_cap.wifi_prop.serialNo);
-   #endif
+    char identity[MAX_STR_LEN] = {'\0'};
+    char password[MAX_STR_LEN] = {'\0'};
+    
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
     anonymous_identity = "anonymous@xfignite.com";
 
-#if 0
-    if (access(INVALID_ANONYMOUS_IDENTITY_FLAG, F_OK) == 0) {
-        anonymous_identity = "anonymous@comcastbusiness.com";
-    } else {
-        anonymous_identity = "anonymous@xfignite.com";
-    }
-#endif
+    get_details_from_file("CM", identity);
+    wifi_hal_dbg_print("[%s %d] CM-MAC/Identity updated as %s\n", __func__, __LINE__, identity);
+    get_details_from_file("Serial", password);
+    wifi_hal_dbg_print("[%s %d] Serial/Password updated as %s\n", __func__, __LINE__, password);
 
     if (interface->u.sta.wpa_sm->eapol == NULL) {
         ctx = os_zalloc(sizeof(struct eapol_ctx));
