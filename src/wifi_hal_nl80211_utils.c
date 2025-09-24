@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -36,6 +36,7 @@
 #include <netlink/handlers.h>
 #include <netlink/attr.h>
 #include <netlink/genl/genl.h>
+#include <sys/ioctl.h>
 #include "wifi_hal.h"
 #include "wifi_hal_priv.h"
 #include <cjson/cJSON.h>
@@ -52,219 +53,311 @@ static unsigned int interface_index_map_size;
 static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #ifdef RASPBERRY_PI_PORT
 #if defined(PLATFORM_LINUX)
-    {0, 0,  "wlan0",     "brlan0",    0,    0,     "private_ssid_2g"},
+    {0, 0,  "wlan0",   "",  "brlan0",    0,    0,      "private_ssid_2g"},
 #else
-    {0, 0,  "wlan0",     "brlan0",    0,    0,     "private_ssid_2g"},
-    {1, 1,  "wlan1",     "brlan0",    0,    1,      "private_ssid_5g"},
-    {0, 0,  "wlan2",     "brlan1",    0,    2,      "iot_ssid_2g"},
-    {1, 1,  "wlan3",     "brlan1",    0,    3,      "iot_ssid_5g"},
-    {0, 0,  "wlan4",     "brlan2",    0,    4,      "hotspot_open_2g"},
-    {1, 1,  "wlan5",     "brlan3",    0,    5,      "hotspot_open_5g"},
-    {0, 0,  "wlan6",     "br1an4",    0,    6,      "lnf_psk_2g"},
-    {1, 1,  "wlan7",     "brlan3",    0,    7,      "lnf_psk_5g"},
-    {0, 0,  "wlan8",     "brlan4",    0,    8,      "hotspot_secure_2g"},
-    {1, 1,  "wlan9",     "brlan5",    0,    9,      "hotspot_secure_5g"},
-    {0, 0,  "wlan10",    "br1an6",    0,    10,     "lnf_radius_2g"},
-    {1, 1,  "wlan11",    "br1an6",    0,    11,     "lnf_radius_5g"},
-    {0, 0,  "wlan12",    "brlan2",    0,    12,     "mesh_backhaul_2g"},
-    {1, 1,  "wlan13",    "brlan3",    0,    13,     "mesh_backhaul_5g"},
-    {0, 0,  "wlan14",    "brlan2",    0,    14,     "mesh_sta_2g"},
-    {1, 1,  "wlan15",    "brlan2",    0,    15,     "mesh_sta_5g"},
+    {0, 0,  "wlan0",   "",  "brlan0",    0,    0,      "private_ssid_2g"},
+    {1, 1,  "wlan1",   "",  "brlan0",    0,    1,      "private_ssid_5g"},
+    {0, 0,  "wlan2",   "",  "brlan1",    0,    2,      "iot_ssid_2g"},
+    {1, 1,  "wlan3",   "",  "brlan1",    0,    3,      "iot_ssid_5g"},
+    {0, 0,  "wlan4",   "",  "brlan2",    0,    4,      "hotspot_open_2g"},
+    {1, 1,  "wlan5",   "",  "brlan3",    0,    5,      "hotspot_open_5g"},
+    {0, 0,  "wlan6",   "",  "br1an4",    0,    6,      "lnf_psk_2g"},
+    {1, 1,  "wlan7",   "",  "brlan3",    0,    7,      "lnf_psk_5g"},
+    {0, 0,  "wlan8",   "",  "brlan4",    0,    8,      "hotspot_secure_2g"},
+    {1, 1,  "wlan9",   "",  "brlan5",    0,    9,      "hotspot_secure_5g"},
+    {0, 0,  "wlan10",  "",  "br1an6",    0,    10,     "lnf_radius_2g"},
+    {1, 1,  "wlan11",  "",  "br1an6",    0,    11,     "lnf_radius_5g"},
+    {0, 0,  "wlan12",  "",  "brlan2",    0,    12,     "mesh_backhaul_2g"},
+    {1, 1,  "wlan13",  "",  "brlan3",    0,    13,     "mesh_backhaul_5g"},
+    {0, 0,  "wlan14",  "",  "brlan2",    0,    14,     "mesh_sta_2g"},
+    {1, 1,  "wlan15",  "",  "brlan2",    0,    15,     "mesh_sta_5g"},
 #endif
 #endif
 
 #ifdef TCXB7_PORT // for Broadcom based platforms
-    {0, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
-    {1, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5g"},
-    {0, 0,  "wl0.2",   "brlan1",  101,    2,      "iot_ssid_2g"},
-    {1, 1,  "wl1.2",   "brlan1",  101,    3,      "iot_ssid_5g"},
-    {0, 0,  "wl0.3",   "brlan2",  102,    4,      "hotspot_open_2g"},
-    {1, 1,  "wl1.3",   "brlan3",  103,    5,      "hotspot_open_5g"},
-    {0, 0,  "wl0.4",   "br106",   106,    6,      "lnf_psk_2g"},
-    {1, 1,  "wl1.4",   "br106",   106,    7,      "lnf_psk_5g"},
-    {0, 0,  "wl0.5",   "brlan4",  104,    8,      "hotspot_secure_2g"},
-    {1, 1,  "wl1.5",   "brlan5",  105,    9,      "hotspot_secure_5g"},
-    {0, 0,  "wl0.6",   "br106",   106,    10,     "lnf_radius_2g"},
-    {1, 1,  "wl1.6",   "br106",   106,    11,     "lnf_radius_5g"},
-    {0, 0,  "wl0.7",   "brlan112",  0,    12,     "mesh_backhaul_2g"},
-    {1, 1,  "wl1.7",   "brlan113",  0,    13,     "mesh_backhaul_5g"},
-    {0, 0,  "wl0",     "brlan1",    0,    14,     "mesh_sta_2g"},
-    {1, 1,  "wl1",     "brlan1",    0,    15,     "mesh_sta_5g"},
+    {0, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_2g"},
+    {1, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_5g"},
+    {0, 0,  "wl0.2",   "",  "brlan1",  101,    2,      "iot_ssid_2g"},
+    {1, 1,  "wl1.2",   "",  "brlan1",  101,    3,      "iot_ssid_5g"},
+    {0, 0,  "wl0.3",   "",  "brlan2",  102,    4,      "hotspot_open_2g"},
+    {1, 1,  "wl1.3",   "",  "brlan3",  103,    5,      "hotspot_open_5g"},
+    {0, 0,  "wl0.4",   "",  "br106",   106,    6,      "lnf_psk_2g"},
+    {1, 1,  "wl1.4",   "",  "br106",   106,    7,      "lnf_psk_5g"},
+    {0, 0,  "wl0.5",   "",  "brlan4",  104,    8,      "hotspot_secure_2g"},
+    {1, 1,  "wl1.5",   "",  "brlan5",  105,    9,      "hotspot_secure_5g"},
+    {0, 0,  "wl0.6",   "",  "br106",   106,    10,     "lnf_radius_2g"},
+    {1, 1,  "wl1.6",   "",  "br106",   106,    11,     "lnf_radius_5g"},
+    {0, 0,  "wl0.7",   "",  "brlan112",  0,    12,     "mesh_backhaul_2g"},
+    {1, 1,  "wl1.7",   "",  "brlan113",  0,    13,     "mesh_backhaul_5g"},
+    {0, 0,  "wl0",     "",  "brlan1",    0,    14,     "mesh_sta_2g"},
+    {1, 1,  "wl1",     "",  "brlan1",    0,    15,     "mesh_sta_5g"},
 #endif
 
 #ifdef TCHCBRV2_PORT // for Broadcom based platforms
-    {0, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
-    {1, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5g"},
-    {0, 0,  "wl0.2",   "brlan1",  101,    2,      "iot_ssid_2g"},
-    {1, 1,  "wl1.2",   "brlan1",  101,    3,      "iot_ssid_5g"},
-    {0, 0,  "wl0.3",   "brlan2",  102,    4,      "hotspot_open_2g"},
-    {1, 1,  "wl1.3",   "brlan3",  103,    5,      "hotspot_open_5g"},
-    {0, 0,  "wl0.4",   "br106",   106,    6,      "lnf_psk_2g"},
-    {1, 1,  "wl1.4",   "br106",   106,    7,      "lnf_psk_5g"},
-    {0, 0,  "wl0.5",   "brlan4",  104,    8,      "hotspot_secure_2g"},
-    {1, 1,  "wl1.5",   "brlan5",  105,    9,      "hotspot_secure_5g"},
-    {0, 0,  "wl0.6",   "br106",   106,    10,     "lnf_radius_2g"},
-    {1, 1,  "wl1.6",   "br106",   106,    11,     "lnf_radius_5g"},
-    {0, 0,  "wl0.7",   "brlan112",  0,    12,     "mesh_backhaul_2g"},
-    {1, 1,  "wl1.7",   "brlan113",  0,    13,     "mesh_backhaul_5g"},
-    {0, 0,  "wl0",     "brlan1",    0,    14,     "mesh_sta_2g"},
-    {1, 1,  "wl1",     "brlan1",    0,    15,     "mesh_sta_5g"},
+    {0, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_2g"},
+    {1, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_5g"},
+    {0, 0,  "wl0.2",   "",  "brlan1",  101,    2,      "iot_ssid_2g"},
+    {1, 1,  "wl1.2",   "",  "brlan1",  101,    3,      "iot_ssid_5g"},
+    {0, 0,  "wl0.3",   "",  "brlan2",  102,    4,      "hotspot_open_2g"},
+    {1, 1,  "wl1.3",   "",  "brlan3",  103,    5,      "hotspot_open_5g"},
+    {0, 0,  "wl0.4",   "",  "br106",   106,    6,      "lnf_psk_2g"},
+    {1, 1,  "wl1.4",   "",  "br106",   106,    7,      "lnf_psk_5g"},
+    {0, 0,  "wl0.5",   "",  "brlan4",  104,    8,      "hotspot_secure_2g"},
+    {1, 1,  "wl1.5",   "",  "brlan5",  105,    9,      "hotspot_secure_5g"},
+    {0, 0,  "wl0.6",   "",  "br106",   106,    10,     "lnf_radius_2g"},
+    {1, 1,  "wl1.6",   "",  "br106",   106,    11,     "lnf_radius_5g"},
+    {0, 0,  "wl0.7",   "",  "brlan112",  0,    12,     "mesh_backhaul_2g"},
+    {1, 1,  "wl1.7",   "",  "brlan113",  0,    13,     "mesh_backhaul_5g"},
+    {0, 0,  "wl0",     "",  "brlan1",    0,    14,     "mesh_sta_2g"},
+    {1, 1,  "wl1",     "",  "brlan1",    0,    15,     "mesh_sta_5g"},
 #endif
 
 #ifdef VNTXER5_PORT // for Qualcomm based platforms
-    {1, 0,  "ath0",   "brlan0",  100,    0,      "private_ssid_2g"},
-    {2, 1,  "ath1",   "brlan0",  100,    1,      "private_ssid_5g"},
-    {1, 0,  "ath2",   "brlan1",  101,    2,      "iot_ssid_2g"},
-    {2, 1,  "ath3",   "brlan1",  101,    3,      "iot_ssid_5g"},
-    {1, 0,  "ath4",   "brlan2",  102,    4,      "hotspot_open_2g"},
-    {2, 1,  "ath5",   "brlan3",  103,    5,      "hotspot_open_5g"},
-    {1, 0,  "ath6",   "br106",   106,    6,      "lnf_psk_2g"},
-    {2, 1,  "ath7",   "br106",   106,    7,      "lnf_psk_5g"},
-    {1, 0,  "ath8",   "brlan4",  104,    8,      "hotspot_secure_2g"},
-    {2, 1,  "ath9",   "brlan5",  105,    9,      "hotspot_secure_5g"},
-    {1, 0,  "ath10",  "br106",   106,    10,     "lnf_radius_2g"},
-    {2, 1,  "ath11",  "br106",   106,    11,     "lnf_radius_5g"},
-    {1, 0,  "ath12",  "brlan112",  0,    12,     "mesh_backhaul_2g"},
-    {2, 1,  "ath13",  "brlan113",  0,    13,     "mesh_backhaul_5g"},
-    {1, 0,  "ath14",  "brlan1",    0,    14,     "mesh_sta_2g"},
-    {2, 1,  "ath15",  "brlan1",    0,    15,     "mesh_sta_5g"},
+    {1, 0,  "ath0",    "",   "brlan0",  100,    0,     "private_ssid_2g"},
+    {2, 1,  "ath1",    "",   "brlan0",  100,    1,     "private_ssid_5g"},
+    {1, 0,  "ath2",    "",   "brlan1",  101,    2,     "iot_ssid_2g"},
+    {2, 1,  "ath3",    "",   "brlan1",  101,    3,     "iot_ssid_5g"},
+    {1, 0,  "ath4",    "",   "brlan2",  102,    4,     "hotspot_open_2g"},
+    {2, 1,  "ath5",    "",   "brlan3",  103,    5,     "hotspot_open_5g"},
+    {1, 0,  "ath6",    "",   "br106",   106,    6,     "lnf_psk_2g"},
+    {2, 1,  "ath7",    "",   "br106",   106,    7,     "lnf_psk_5g"},
+    {1, 0,  "ath8",    "",   "brlan4",  104,    8,     "hotspot_secure_2g"},
+    {2, 1,  "ath9",    "",   "brlan5",  105,    9,     "hotspot_secure_5g"},
+    {1, 0,  "ath10",   "",   "br106",   106,    10,    "lnf_radius_2g"},
+    {2, 1,  "ath11",   "",   "br106",   106,    11,    "lnf_radius_5g"},
+    {1, 0,  "ath12",   "",   "brlan112",  0,    12,    "mesh_backhaul_2g"},
+    {2, 1,  "ath13",   "",   "brlan113",  0,    13,    "mesh_backhaul_5g"},
+    {1, 0,  "ath14",   "",   "brlan1",    0,    14,    "mesh_sta_2g"},
+    {2, 1,  "ath15",   "",   "brlan1",    0,    15,    "mesh_sta_5g"},
 #endif
 
 #ifdef TARGET_GEMINI7_2 // for Qualcomm based platforms
-    {1, 0,  "home-ap-24",   "br-home",  100,    0,      "private_ssid_2g"},
-    {2, 1,  "home-ap-50",   "br-home",  100,    1,      "private_ssid_5g"},
-    {1, 0,  "bhaul-ap-24",  "",  0,    12,     "mesh_backhaul_2g"},
-    {2, 1,  "bhaul-ap-50",  "",  0,    13,     "mesh_backhaul_5g"},
-    {1, 0,  "bhaul-sta-24",  "",    0,    14,     "mesh_sta_2g"},
-    {2, 1,  "bhaul-sta-50",  "",    0,    15,     "mesh_sta_5g"},
+    {1, 0,  "home-ap-24",   "", "br-home",  100,   0,  "private_ssid_2g"},
+    {2, 1,  "home-ap-50",   "", "br-home",  100,   1,  "private_ssid_5g"},
+    {1, 0,  "bhaul-ap-24",  "", "",           0,  12,  "mesh_backhaul_2g"},
+    {2, 1,  "bhaul-ap-50",  "", "",           0,  13,  "mesh_backhaul_5g"},
+    {1, 0,  "bhaul-sta-24", "", "",           0,  14,  "mesh_sta_2g"},
+    {2, 1,  "bhaul-sta-50", "", "",           0,  15,  "mesh_sta_5g"},
 #endif
 
-#ifdef CMXB7_PORT // for Intel based platforms  
-    {1, 0,  "wlan0.0",   "brlan0",  100, 0,      "private_ssid_2g"},
-    {0, 1,  "wlan2.0",   "brlan0",  100, 1,      "private_ssid_5g"},
-    {1, 0,  "wlan0.1",   "brlan1",  101, 2,      "iot_ssid_2g"},
-    {0, 1,  "wlan2.1",   "brlan1",  101, 3,      "iot_ssid_5g"},
-    {1, 0,  "wlan0.2",   "brlan2",  102, 4,      "hotspot_open_2g"},
-    {0, 1,  "wlan2.2",   "brlan3",  103, 5,      "hotspot_open_5g"},
-    {1, 0,  "wlan0.3",   "br106",   106, 6,      "lnf_psk_2g"},
-    {0, 1,  "wlan2.3",   "br106",   106, 7,      "lnf_psk_5g"},
-    {1, 0,  "wlan0.4",   "brlan4",  104, 8,      "hotspot_secure_2g"},
-    {0, 1,  "wlan2.4",   "brlan5",  105, 9,      "hotspot_secure_5g"},
-    {1, 0,  "wlan0.5",   "br106",   106, 10,     "lnf_radius_2g"},
-    {0, 1,  "wlan2.5",   "br106",   106, 11,     "lnf_radius_5g"},
-    {1, 0,  "wlan0.6",   "brlan112",112, 12,     "mesh_backhaul_2g"},
-    {0, 1,  "wlan2.6",   "brlan113",113, 13,     "mesh_backhaul_5g"},
-    {1, 0,  "wlan1",     "brlan1",    0, 14,     "mesh_sta_2g"},
-    {0, 1,  "wlan3",     "brlan1",    0, 15,     "mesh_sta_5g"},   
+#ifdef CMXB7_PORT // for Intel based platforms
+    {1, 0,  "wlan0.0", "",   "brlan0",  100, 0,      "private_ssid_2g"},
+    {0, 1,  "wlan2.0", "",   "brlan0",  100, 1,      "private_ssid_5g"},
+    {1, 0,  "wlan0.1", "",   "brlan1",  101, 2,      "iot_ssid_2g"},
+    {0, 1,  "wlan2.1", "",   "brlan1",  101, 3,      "iot_ssid_5g"},
+    {1, 0,  "wlan0.2", "",   "brlan2",  102, 4,      "hotspot_open_2g"},
+    {0, 1,  "wlan2.2", "",   "brlan3",  103, 5,      "hotspot_open_5g"},
+    {1, 0,  "wlan0.3", "",   "br106",   106, 6,      "lnf_psk_2g"},
+    {0, 1,  "wlan2.3", "",   "br106",   106, 7,      "lnf_psk_5g"},
+    {1, 0,  "wlan0.4", "",   "brlan4",  104, 8,      "hotspot_secure_2g"},
+    {0, 1,  "wlan2.4", "",   "brlan5",  105, 9,      "hotspot_secure_5g"},
+    {1, 0,  "wlan0.5", "",   "br106",   106, 10,     "lnf_radius_2g"},
+    {0, 1,  "wlan2.5", "",   "br106",   106, 11,     "lnf_radius_5g"},
+    {1, 0,  "wlan0.6", "",   "brlan112",112, 12,     "mesh_backhaul_2g"},
+    {0, 1,  "wlan2.6", "",   "brlan113",113, 13,     "mesh_backhaul_5g"},
+    {1, 0,  "wlan1",   "",   "brlan1",    0, 14,     "mesh_sta_2g"},
+    {0, 1,  "wlan3",   "",   "brlan1",    0, 15,     "mesh_sta_5g"},   
 #endif
 
 #ifdef XLE_PORT // for Broadcom XLE
 
-#ifdef XLE_3_RADIO_SUPPORT
-    {0, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
-    {1, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5gl"},
-    {0, 0,  "wl0.2",   "brlan1",  101,    2,      "iot_ssid_2g"},
-    {1, 1,  "wl1.2",   "brlan1",  101,    3,      "iot_ssid_5gl"},
-    {0, 0,  "wl0.3",   "brlan2",  102,    4,      "hotspot_open_2g"},
-    {1, 1,  "wl1.3",   "brlan3",  103,    5,      "hotspot_open_5gl"},
-    {0, 0,  "wl0.4",   "br106",   106,    6,      "lnf_psk_2g"},
-    {1, 1,  "wl1.4",   "br106",   106,    7,      "lnf_psk_5gl"},
-    {0, 0,  "wl0.5",   "brlan4",  104,    8,      "hotspot_secure_2g"},
-    {1, 1,  "wl1.5",   "brlan5",  105,    9,      "hotspot_secure_5gl"},
-    {0, 0,  "wl0.6",   "br106",   106,    10,     "lnf_radius_2g"},
-    {1, 1,  "wl1.6",   "br106",   106,    11,     "lnf_radius_5gl"},
-    {0, 0,  "wl0.7",   "brlan112",112,    12,     "mesh_backhaul_2g"},
-    {1, 1,  "wl1.7",   "brlan113",113,    13,     "mesh_backhaul_5gl"},
-    {0, 0,  "wl0",     "",          0,    14,     "mesh_sta_2g"},
-    {1, 1,  "wl1",     "",          0,    15,     "mesh_sta_5gl"},
-    {2, 2,  "wl2.1",   "brlan0",  100,    16,     "private_ssid_5gh"},
-    {2, 2,  "wl2.2",   "brlan1",  101,    17,     "iot_ssid_5gh"},
-    {2, 2,  "wl2.3",   "brlan3",  103,    18,     "hotspot_open_5gh"},
-    {2, 2,  "wl2.4",   "br106",   106,    19,     "lnf_psk_5gh"},
-    {2, 2,  "wl2.5",   "brlan5",  105,    20,     "hotspot_secure_5gh"},
-    {2, 2,  "wl2.6",   "br106",   106,    21,     "lnf_radius_5gh"},
-    {2, 2,  "wl2.7",   "brlan113",114,    22,     "mesh_backhaul_5gh"},
-    {2, 2,  "wl2",     "",          0,    23,     "mesh_sta_5gh"},
+#if defined (XLE_3_RADIO_SUPPORT) && defined(XLE_BCM_SDK_504L04P3)
+    {1, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_2g"},
+    {2, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_5gl"},
+    {1, 0,  "wl0.2",   "",  "brlan1",  101,    2,      "iot_ssid_2g"},
+    {2, 1,  "wl1.2",   "",  "brlan1",  101,    3,      "iot_ssid_5gl"},
+    {1, 0,  "wl0.3",   "",  "brlan2",  102,    4,      "hotspot_open_2g"},
+    {2, 1,  "wl1.3",   "",  "brlan3",  103,    5,      "hotspot_open_5gl"},
+    {1, 0,  "wl0.4",   "",  "br106",   106,    6,      "lnf_psk_2g"},
+    {2, 1,  "wl1.4",   "",  "br106",   106,    7,      "lnf_psk_5gl"},
+    {1, 0,  "wl0.5",   "",  "brlan4",  104,    8,      "hotspot_secure_2g"},
+    {2, 1,  "wl1.5",   "",  "brlan5",  105,    9,      "hotspot_secure_5gl"},
+    {1, 0,  "wl0.6",   "",  "br106",   106,    10,     "lnf_radius_2g"},
+    {2, 1,  "wl1.6",   "",  "br106",   106,    11,     "lnf_radius_5gl"},
+    {1, 0,  "wl0.7",   "",  "brlan112",112,    12,     "mesh_backhaul_2g"},
+    {2, 1,  "wl1.7",   "",  "brlan113",113,    13,     "mesh_backhaul_5gl"},
+    {1, 0,  "wl0",     "",  "",          0,    14,     "mesh_sta_2g"},
+    {2, 1,  "wl1",     "",  "",          0,    15,     "mesh_sta_5gl"},
+    {0, 2,  "wl2.1",   "",  "brlan0",  100,    16,     "private_ssid_5gh"},
+    {0, 2,  "wl2.2",   "",  "brlan1",  101,    17,     "iot_ssid_5gh"},
+    {0, 2,  "wl2.3",   "",  "brlan3",  103,    18,     "hotspot_open_5gh"},
+    {0, 2,  "wl2.4",   "",  "br106",   106,    19,     "lnf_psk_5gh"},
+    {0, 2,  "wl2.5",   "",  "brlan5",  105,    20,     "hotspot_secure_5gh"},
+    {0, 2,  "wl2.6",   "",  "br106",   106,    21,     "lnf_radius_5gh"},
+    {0, 2,  "wl2.7",   "",  "brlan113",114,    22,     "mesh_backhaul_5gh"},
+    {0, 2,  "wl2",     "",  "",          0,    23,     "mesh_sta_5gh"},
+#elif defined (XLE_3_RADIO_SUPPORT)
+    {0, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_2g"},
+    {1, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_5gl"},
+    {0, 0,  "wl0.2",   "",  "brlan1",  101,    2,      "iot_ssid_2g"},
+    {1, 1,  "wl1.2",   "",  "brlan1",  101,    3,      "iot_ssid_5gl"},
+    {0, 0,  "wl0.3",   "",  "brlan2",  102,    4,      "hotspot_open_2g"},
+    {1, 1,  "wl1.3",   "",  "brlan3",  103,    5,      "hotspot_open_5gl"},
+    {0, 0,  "wl0.4",   "",  "br106",   106,    6,      "lnf_psk_2g"},
+    {1, 1,  "wl1.4",   "",  "br106",   106,    7,      "lnf_psk_5gl"},
+    {0, 0,  "wl0.5",   "",  "brlan4",  104,    8,      "hotspot_secure_2g"},
+    {1, 1,  "wl1.5",   "",  "brlan5",  105,    9,      "hotspot_secure_5gl"},
+    {0, 0,  "wl0.6",   "",  "br106",   106,    10,     "lnf_radius_2g"},
+    {1, 1,  "wl1.6",   "",  "br106",   106,    11,     "lnf_radius_5gl"},
+    {0, 0,  "wl0.7",   "",  "brlan112",112,    12,     "mesh_backhaul_2g"},
+    {1, 1,  "wl1.7",   "",  "brlan113",113,    13,     "mesh_backhaul_5gl"},
+    {0, 0,  "wl0",     "",  "",          0,    14,     "mesh_sta_2g"},
+    {1, 1,  "wl1",     "",  "",          0,    15,     "mesh_sta_5gl"},
+    {2, 2,  "wl2.1",   "",  "brlan0",  100,    16,     "private_ssid_5gh"},
+    {2, 2,  "wl2.2",   "",  "brlan1",  101,    17,     "iot_ssid_5gh"},
+    {2, 2,  "wl2.3",   "",  "brlan3",  103,    18,     "hotspot_open_5gh"},
+    {2, 2,  "wl2.4",   "",  "br106",   106,    19,     "lnf_psk_5gh"},
+    {2, 2,  "wl2.5",   "",  "brlan5",  105,    20,     "hotspot_secure_5gh"},
+    {2, 2,  "wl2.6",   "",  "br106",   106,    21,     "lnf_radius_5gh"},
+    {2, 2,  "wl2.7",   "",  "brlan113",114,    22,     "mesh_backhaul_5gh"},
+    {2, 2,  "wl2",     "",  "",          0,    23,     "mesh_sta_5gh"},
 
 #else
-    {0, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
-    {1, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5g"},
-    {0, 0,  "wl0.2",   "brlan1",  101,    2,      "iot_ssid_2g"},
-    {1, 1,  "wl1.2",   "brlan1",  101,    3,      "iot_ssid_5g"},
-    {0, 0,  "wl0.3",   "brlan2",  102,    4,      "hotspot_open_2g"},
-    {1, 1,  "wl1.3",   "brlan3",  103,    5,      "hotspot_open_5g"},
-    {0, 0,  "wl0.4",   "br106",   106,    6,      "lnf_psk_2g"},
-    {1, 1,  "wl1.4",   "br106",   106,    7,      "lnf_psk_5g"},
-    {0, 0,  "wl0.5",   "brlan4",  104,    8,      "hotspot_secure_2g"},
-    {1, 1,  "wl1.5",   "brlan5",  105,    9,      "hotspot_secure_5g"},
-    {0, 0,  "wl0.6",   "br106",   106,    10,     "lnf_radius_2g"},
-    {1, 1,  "wl1.6",   "br106",   106,    11,     "lnf_radius_5g"},
-    {0, 0,  "wl0.7",   "brlan112",112,    12,     "mesh_backhaul_2g"},
-    {1, 1,  "wl1.7",   "brlan113",113,    13,     "mesh_backhaul_5g"},
-    {0, 0,  "wl0",     "",          0,    14,     "mesh_sta_2g"},
-    {1, 1,  "wl1",     "",          0,    15,     "mesh_sta_5g"},
+    {0, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_2g"},
+    {1, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_5g"},
+    {0, 0,  "wl0.2",   "",  "brlan1",  101,    2,      "iot_ssid_2g"},
+    {1, 1,  "wl1.2",   "",  "brlan1",  101,    3,      "iot_ssid_5g"},
+    {0, 0,  "wl0.3",   "",  "brlan2",  102,    4,      "hotspot_open_2g"},
+    {1, 1,  "wl1.3",   "",  "brlan3",  103,    5,      "hotspot_open_5g"},
+    {0, 0,  "wl0.4",   "",  "br106",   106,    6,      "lnf_psk_2g"},
+    {1, 1,  "wl1.4",   "",  "br106",   106,    7,      "lnf_psk_5g"},
+    {0, 0,  "wl0.5",   "",  "brlan4",  104,    8,      "hotspot_secure_2g"},
+    {1, 1,  "wl1.5",   "",  "brlan5",  105,    9,      "hotspot_secure_5g"},
+    {0, 0,  "wl0.6",   "",  "br106",   106,    10,     "lnf_radius_2g"},
+    {1, 1,  "wl1.6",   "",  "br106",   106,    11,     "lnf_radius_5g"},
+    {0, 0,  "wl0.7",   "",  "brlan112",112,    12,     "mesh_backhaul_2g"},
+    {1, 1,  "wl1.7",   "",  "brlan113",113,    13,     "mesh_backhaul_5g"},
+    {0, 0,  "wl0",     "",  "",          0,    14,     "mesh_sta_2g"},
+    {1, 1,  "wl1",     "",  "",          0,    15,     "mesh_sta_5g"},
 #endif
 #endif
 
 #ifdef TCXB8_PORT
-    {1, 0,  "wl0.1",   "brlan0",   100,   0,      "private_ssid_2g"},
-    {0, 1,  "wl1.1",   "brlan0",   100,   1,      "private_ssid_5g"},
-    {1, 0,  "wl0.2",   "brlan1",   101,   2,      "iot_ssid_2g"},
-    {0, 1,  "wl1.2",   "brlan1",   101,   3,      "iot_ssid_5g"},
-    {1, 0,  "wl0.3",   "brlan2",   102,   4,      "hotspot_open_2g"},
-    {0, 1,  "wl1.3",   "brlan3",   103,   5,      "hotspot_open_5g"},
-    {1, 0,  "wl0.4",   "br106",    106,   6,      "lnf_psk_2g"},
-    {0, 1,  "wl1.4",   "br106",    106,   7,      "lnf_psk_5g"},
-    {1, 0,  "wl0.5",   "brlan4",   104,   8,      "hotspot_secure_2g"},
-    {0, 1,  "wl1.5",   "brlan5",   105,   9,      "hotspot_secure_5g"},
-    {1, 0,  "wl0.6",   "br106",    106,   10,     "lnf_radius_2g"},
-    {0, 1,  "wl1.6",   "br106",    106,   11,     "lnf_radius_5g"},
-    {1, 0,  "wl0.7",   "brlan112", 112,   12,     "mesh_backhaul_2g"},
-    {0, 1,  "wl1.7",   "brlan113", 113,   13,     "mesh_backhaul_5g"},
-    {1, 0,  "wl0",     "",         0,     14,     "mesh_sta_2g"},
-    {0, 1,  "wl1",     "",         0,     15,     "mesh_sta_5g"},
-    {2, 2,  "wl2.1",   "brlan0",   100,   16,     "private_ssid_6g"},
-    {2, 2,  "wl2.2",   "brlan1",   101,   17,     "iot_ssid_6g"},
-    {2, 2,  "wl2.3",   "bropen6g", 2253,  18,     "hotspot_open_6g"},
-    {2, 2,  "wl2.4",   "br106",    106,   19,     "lnf_psk_6g"},
-    {2, 2,  "wl2.5",   "brsecure6g",2256, 20,     "hotspot_secure_6g"},
+    {1, 0,  "wl0.1",   "",  "brlan0",   100,   0,      "private_ssid_2g"},
+    {0, 1,  "wl1.1",   "",  "brlan0",   100,   1,      "private_ssid_5g"},
+    {1, 0,  "wl0.2",   "",  "brlan1",   101,   2,      "iot_ssid_2g"},
+    {0, 1,  "wl1.2",   "",  "brlan1",   101,   3,      "iot_ssid_5g"},
+    {1, 0,  "wl0.3",   "",  "brlan2",   102,   4,      "hotspot_open_2g"},
+    {0, 1,  "wl1.3",   "",  "brlan3",   103,   5,      "hotspot_open_5g"},
+    {1, 0,  "wl0.4",   "",  "br106",    106,   6,      "lnf_psk_2g"},
+    {0, 1,  "wl1.4",   "",  "br106",    106,   7,      "lnf_psk_5g"},
+    {1, 0,  "wl0.5",   "",  "brlan4",   104,   8,      "hotspot_secure_2g"},
+    {0, 1,  "wl1.5",   "",  "brlan5",   105,   9,      "hotspot_secure_5g"},
+    {1, 0,  "wl0.6",   "",  "br106",    106,   10,     "lnf_radius_2g"},
+    {0, 1,  "wl1.6",   "",  "br106",    106,   11,     "lnf_radius_5g"},
+    {1, 0,  "wl0.7",   "",  "brlan112", 112,   12,     "mesh_backhaul_2g"},
+    {0, 1,  "wl1.7",   "",  "brlan113", 113,   13,     "mesh_backhaul_5g"},
+    {1, 0,  "wl0",     "",  "",         0,     14,     "mesh_sta_2g"},
+    {0, 1,  "wl1",     "",  "",         0,     15,     "mesh_sta_5g"},
+    {2, 2,  "wl2.1",   "",  "brlan0",   100,   16,     "private_ssid_6g"},
+    {2, 2,  "wl2.2",   "",  "brlan1",   101,   17,     "iot_ssid_6g"},
+    {2, 2,  "wl2.3",   "",  "bropen6g", 2253,  18,     "hotspot_open_6g"},
+    {2, 2,  "wl2.4",   "",  "br106",    106,   19,     "lnf_psk_6g"},
+    {2, 2,  "wl2.5",   "",  "brsecure6g",2256, 20,     "hotspot_secure_6g"},
 #if 0
-    {2, 2,  "wl2.6",   "br106",    106,   21,     "lnf_radius_6g"},
+    {2, 2,  "wl2.6",   "",  "br106",    106,   21,     "lnf_radius_6g"},
 #endif
-    {2, 2,  "wl2.7",   "brlan114", 114,   22,     "mesh_backhaul_6g"},
-    {2, 2,  "wl2",     "",         0,     23,     "mesh_sta_6g"},
+    {2, 2,  "wl2.7",   "",  "brlan114", 114,   22,     "mesh_backhaul_6g"},
+    {2, 2,  "wl2",     "",  "",         0,     23,     "mesh_sta_6g"},
 #endif
 
 #ifdef XB10_PORT
-    {2, 0,  "wl0.1",   "brlan0",   100,   0,      "private_ssid_2g"},
-    {1, 1,  "wl1.1",   "brlan0",   100,   1,      "private_ssid_5g"},
-    {2, 0,  "wl0.2",   "brlan1",   101,   2,      "iot_ssid_2g"},
-    {1, 1,  "wl1.2",   "brlan1",   101,   3,      "iot_ssid_5g"},
-    {2, 0,  "wl0.3",   "brlan2",   102,   4,      "hotspot_open_2g"},
-    {1, 1,  "wl1.3",   "brlan3",   103,   5,      "hotspot_open_5g"},
-    {2, 0,  "wl0.4",   "br106",    106,   6,      "lnf_psk_2g"},
-    {1, 1,  "wl1.4",   "br106",    106,   7,      "lnf_psk_5g"},
-    {2, 0,  "wl0.5",   "brlan4",   104,   8,      "hotspot_secure_2g"},
-    {1, 1,  "wl1.5",   "brlan5",   105,   9,      "hotspot_secure_5g"},
-    {2, 0,  "wl0.6",   "br106",    106,   10,     "lnf_radius_2g"},
-    {1, 1,  "wl1.6",   "br106",    106,   11,     "lnf_radius_5g"},
-    {2, 0,  "wl0.7",   "brlan112", 112,   12,     "mesh_backhaul_2g"},
-    {1, 1,  "wl1.7",   "brlan113", 113,   13,     "mesh_backhaul_5g"},
-    {2, 0,  "wl0",     "",         0,     14,     "mesh_sta_2g"},
-    {1, 1,  "wl1",     "",         0,     15,     "mesh_sta_5g"},
-    {0, 2,  "wl2.1",   "brlan0",   100,   16,     "private_ssid_6g"},
-    {0, 2,  "wl2.2",   "brlan1",   101,   17,     "iot_ssid_6g"},
-    {0, 2,  "wl2.3",   "bropen6g", 2253,  18,     "hotspot_open_6g"},
-    {0, 2,  "wl2.4",   "br106",    106,   19,     "lnf_psk_6g"},
-    {0, 2,  "wl2.5",   "brsecure6g",2256, 20,     "hotspot_secure_6g"},
+    {2, 0,  "wl0.1",   "",  "brlan0",   100,   0,      "private_ssid_2g"},
+    {1, 1,  "wl1.1",   "",  "brlan0",   100,   1,      "private_ssid_5g"},
+    {2, 0,  "wl0.2",   "",  "brlan1",   101,   2,      "iot_ssid_2g"},
+    {1, 1,  "wl1.2",   "",  "brlan1",   101,   3,      "iot_ssid_5g"},
+    {2, 0,  "wl0.3",   "",  "brlan2",   102,   4,      "hotspot_open_2g"},
+    {1, 1,  "wl1.3",   "",  "brlan3",   103,   5,      "hotspot_open_5g"},
+    {2, 0,  "wl0.4",   "",  "br106",    106,   6,      "lnf_psk_2g"},
+    {1, 1,  "wl1.4",   "",  "br106",    106,   7,      "lnf_psk_5g"},
+    {2, 0,  "wl0.5",   "",  "brlan4",   104,   8,      "hotspot_secure_2g"},
+    {1, 1,  "wl1.5",   "",  "brlan5",   105,   9,      "hotspot_secure_5g"},
+    {2, 0,  "wl0.6",   "",  "br106",    106,   10,     "lnf_radius_2g"},
+    {1, 1,  "wl1.6",   "",  "br106",    106,   11,     "lnf_radius_5g"},
+    {2, 0,  "wl0.7",   "",  "brlan112", 112,   12,     "mesh_backhaul_2g"},
+    {1, 1,  "wl1.7",   "",  "brlan113", 113,   13,     "mesh_backhaul_5g"},
+    {2, 0,  "wl0",     "",  "",         0,     14,     "mesh_sta_2g"},
+    {1, 1,  "wl1",     "",  "",         0,     15,     "mesh_sta_5g"},
+    {0, 2,  "wl2.1",   "",  "brlan0",   100,   16,     "private_ssid_6g"},
+    {0, 2,  "wl2.2",   "",  "brlan1",   101,   17,     "iot_ssid_6g"},
+    {0, 2,  "wl2.3",   "",  "bropen6g", 2253,  18,     "hotspot_open_6g"},
+    {0, 2,  "wl2.4",   "",  "br106",    106,   19,     "lnf_psk_6g"},
+    {0, 2,  "wl2.5",   "",  "brsecure6g",2256, 20,     "hotspot_secure_6g"},
 #if 0
-    {0, 2,  "wl2.6",   "br106",    106,   21,     "lnf_radius_6g"},
+    {0, 2,  "wl2.6",   "",  "br106",    106,   21,     "lnf_radius_6g"},
 #endif
-    {0, 2,  "wl2.7",   "brlan114", 114,   22,     "mesh_backhaul_6g"},
-    {0, 2,  "wl2",     "",         0,     23,     "mesh_sta_6g"},
+    {0, 2,  "wl2.7",   "",  "brlan114", 114,   22,     "mesh_backhaul_6g"},
+    {0, 2,  "wl2",     "",  "",         0,     23,     "mesh_sta_6g"},
 #endif
 
 #ifdef SCXER10_PORT
+    {1, 0,  "wl0.1",   "",  "brlan0",   100,   0,      "private_ssid_2g"},
+    {2, 1,  "wl1.1",   "",  "brlan0",   100,   1,      "private_ssid_5g"},
+    {1, 0,  "wl0.2",   "",  "brlan1",   101,   2,      "iot_ssid_2g"},
+    {2, 1,  "wl1.2",   "",  "brlan1",   101,   3,      "iot_ssid_5g"},
+    {1, 0,  "wl0.3",   "",  "brlan2",   102,   4,      "hotspot_open_2g"},
+    {2, 1,  "wl1.3",   "",  "brlan3",   103,   5,      "hotspot_open_5g"},
+    {1, 0,  "wl0.4",   "",  "br106",    106,   6,      "lnf_psk_2g"},
+    {2, 1,  "wl1.4",   "",  "br106",    106,   7,      "lnf_psk_5g"},
+    {1, 0,  "wl0.5",   "",  "brlan4",   104,   8,      "hotspot_secure_2g"},
+    {2, 1,  "wl1.5",   "",  "brlan5",   105,   9,      "hotspot_secure_5g"},
+    {1, 0,  "wl0.6",   "",  "br106",    106,   10,     "lnf_radius_2g"},
+    {2, 1,  "wl1.6",   "",  "br106",    106,   11,     "lnf_radius_5g"},
+    {1, 0,  "wl0.7",   "",  "brlan112", 112,   12,     "mesh_backhaul_2g"},
+    {2, 1,  "wl1.7",   "",  "brlan113", 113,   13,     "mesh_backhaul_5g"},
+    {1, 0,  "wl0",     "",  "",         0,     14,     "mesh_sta_2g"},
+    {2, 1,  "wl1",     "",  "",         0,     15,     "mesh_sta_5g"},
+    {0, 2,  "wl2.1",   "",  "brlan0",   100,   16,     "private_ssid_6g"},
+    {0, 2,  "wl2.2",   "",  "brlan1",   101,   17,     "iot_ssid_6g"},
+    {0, 2,  "wl2.3",   "",  "bropen6g", 2253,  18,     "hotspot_open_6g"},
+    {0, 2,  "wl2.4",   "",  "br106",    106,   19,     "lnf_psk_6g"},
+    {0, 2,  "wl2.5",   "",  "brsecure6g",2256, 20,     "hotspot_secure_6g"},
+#if 0
+    {0, 2,  "wl2.6",   "",  "br106",    106,   21,     "lnf_radius_6g"},
+#endif
+    {0, 2,  "wl2.7",   "",  "brlan114", 114,   22,     "mesh_backhaul_6g"},
+    {0, 2,  "wl2",     "",  "",         0,     23,     "mesh_sta_6g"},
+#endif
+
+#ifdef SKYSR213_PORT // for Broadcom based platforms
+    {0, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_2g"},
+    {1, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_5g"},
+    {0, 0,  "wl0.2",   "",  "brlan9",  101,    2,      "iot_ssid_2g"},
+    {1, 1,  "wl1.2",   "",  "brlan10", 101,    3,      "iot_ssid_5g"},
+    {0, 0,  "wl0.7",   "",  "brlan6",    0,    12,     "mesh_backhaul_2g"},
+    {1, 1,  "wl1.7",   "",  "brlan7",    0,    13,     "mesh_backhaul_5g"},
+    {0, 0,  "wl0",     "",  "",          0,    14,     "mesh_sta_2g"},
+    {1, 1,  "wl1",     "",  "",          0,    15,     "mesh_sta_5g"},
+#endif
+
+#ifdef RDKB_ONE_WIFI_PROD
+{0, 0,  "wl0.1",   "brlan0",   100,   0,      "private_ssid_2g"},
+{2, 1,  "wl1.1",   "brlan0",   100,   1,      "private_ssid_5g"},
+{0, 0,  "wl0.2",   "brlan1",   101,   2,      "iot_ssid_2g"},
+{2, 1,  "wl1.2",   "brlan1",   101,   3,      "iot_ssid_5g"},
+{0, 0,  "wl0.3",   "brlan2",   102,   4,      "hotspot_open_2g"},
+{2, 1,  "wl1.3",   "brlan3",   103,   5,      "hotspot_open_5g"},
+{0, 0,  "wl0.4",   "br106",    106,   6,      "lnf_psk_2g"},
+{2, 1,  "wl1.4",   "br106",    106,   7,      "lnf_psk_5g"},
+{0, 0,  "wl0.5",   "brlan4",   104,   8,      "hotspot_secure_2g"},
+{2, 1,  "wl1.5",   "brlan5",   105,   9,      "hotspot_secure_5g"},
+{0, 0,  "wl0.6",   "br106",    106,   10,     "lnf_radius_2g"},
+{2, 1,  "wl1.6",   "br106",    106,   11,     "lnf_radius_5g"},
+{0, 0,  "wl0.7",   "brlan112", 112,   12,     "mesh_backhaul_2g"},
+{2, 1,  "wl1.7",   "brlan113", 113,   13,     "mesh_backhaul_5g"},
+{0, 0,  "wl0",     "",         0,     14,     "mesh_sta_2g"},
+{2, 1,  "wl1",     "",         0,     15,     "mesh_sta_5g"},
+#ifdef RDKB_ONE_WIFI_3_RADIO_SUPPORT
+{1, 2,  "wl2.1",   "brlan0",   100,   16,     "private_ssid_6g"},
+{1, 2,  "wl2.2",   "brlan1",   101,   17,     "iot_ssid_6g"},
+{1, 2,  "wl2.3",   "bropen6g", 2253,  18,     "hotspot_open_6g"},
+{1, 2,  "wl2.5",   "brsecure6g",2256, 20,     "hotspot_secure_6g"},
+{1, 2,  "wl2.7",   "brlan114", 114,   22,     "mesh_backhaul_6g"},
+{1, 2,  "wl2",     "",         0,     23,     "mesh_sta_6g"},
+#endif /* RDKB_ONE_WIFI_3_RADIO_SUPPORT */
+#endif /* RDKB_ONE_WIFI_PROD */
+  
+#ifdef SCXF10_PORT
     {1, 0,  "wl0.1",   "brlan0",   100,   0,      "private_ssid_2g"},
     {2, 1,  "wl1.1",   "brlan0",   100,   1,      "private_ssid_5g"},
     {1, 0,  "wl0.2",   "brlan1",   101,   2,      "iot_ssid_2g"},
@@ -291,17 +384,6 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #endif
     {0, 2,  "wl2.7",   "brlan114", 114,   22,     "mesh_backhaul_6g"},
     {0, 2,  "wl2",     "",         0,     23,     "mesh_sta_6g"},
-#endif
-
-#ifdef SKYSR213_PORT // for Broadcom based platforms
-    {0, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
-    {1, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5g"},
-    {0, 0,  "wl0.2",   "brlan9",  101,    2,      "iot_ssid_2g"},
-    {1, 1,  "wl1.2",   "brlan10", 101,    3,      "iot_ssid_5g"},
-    {0, 0,  "wl0.7",   "brlan6",    0,    12,     "mesh_backhaul_2g"},
-    {1, 1,  "wl1.7",   "brlan7",    0,    13,     "mesh_backhaul_5g"},
-    {0, 0,  "wl0",     "",    0,    14,     "mesh_sta_2g"},
-    {1, 1,  "wl1",     "",    0,    15,     "mesh_sta_5g"},
 #endif
     // for Intel based platforms
 };
@@ -346,7 +428,15 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 2, 1, "radio2", "wl1"},
     { 0, 2, "radio3", "wl2"},
 #endif
-  
+
+/* PHY radio mapping needs to be verified against the hardware */
+/* TBD */
+#if defined(SCXF10_PORT) 
+    { 1, 0, "radio1", "wl0"},
+    { 2, 1, "radio2", "wl1"},
+    { 0, 2, "radio3", "wl2"},
+#endif
+ 
 #ifdef CMXB7_PORT // for Intel based platforms
     { 1, 0, "radio1", "wlan0"},
     { 0, 1, "radio2", "wlan2"},
@@ -358,6 +448,14 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 1, 1, "radio2", "wlan1"},
 #else
     { 0, 0, "radio1", "wlan0"},
+#endif
+#endif
+
+#if defined(RDKB_ONE_WIFI_PROD)
+    { 2, 0, "radio1", "wl0"},
+    { 1, 1, "radio2", "wl1"},
+#ifdef RDKB_ONE_WIFI_3_RADIO_SUPPORT
+    { 0, 2, "radio3", "wl2"},
 #endif
 #endif
 };
@@ -664,7 +762,40 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
 #endif
-  
+
+#ifdef SCXF10_PORT // for Broadcom based platforms
+    "xf10",
+    "dhd",
+    {"Xfinity Wireless Gateway","Sercomm","XF10","SCXF11BFL","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+#endif
+ 
 #ifdef CMXB7_PORT
     "cmxb7",
     "mtlk",
@@ -757,6 +888,36 @@ const wifi_driver_info_t  driver_info = {
     platform_get_acl_num,
     platform_get_chanspec_list,
     platform_set_acs_exclusion_list,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+#endif
+#ifdef RDKB_ONE_WIFI_PROD // for Broadcom based platforms
+    "rdkb",
+    "dhd",
+    {"rdkb","rdkb","cm","cm","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -1016,6 +1177,19 @@ static struct wifiCountryEnumStrMap wifi_country_map[] =
     {wifi_countrycode_ZM,"ZM"}, /**< ZAMBIA */
     {wifi_countrycode_ZW,"ZW"} /**< ZIMBABWE */
 };
+
+const unsigned int wifi_2g_channels[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
+const unsigned int wifi_2g_channels_count = sizeof(wifi_2g_channels) / sizeof(wifi_2g_channels[0]);
+
+const unsigned int wifi_5g_channels[] = { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116,
+    120, 124, 128, 132, 136, 140, 149, 153, 157, 161, 165, 169, 173, 177 };
+const unsigned int wifi_5g_channels_count = sizeof(wifi_5g_channels) / sizeof(wifi_5g_channels[0]);
+
+const unsigned int wifi_6g_channels[] = { 1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57,
+    61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 129, 133, 137, 141,
+    145, 149, 153, 157, 161, 165, 169, 173, 177, 181, 185, 189, 193, 197, 201, 205, 209, 213, 217,
+    221, 225, 229, 233 };
+const unsigned int wifi_6g_channels_count = sizeof(wifi_6g_channels) / sizeof(wifi_6g_channels[0]);
 
 struct wifiEnvironmentEnumStrMap wifi_environment_map[] =
 {
@@ -1659,6 +1833,8 @@ int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *inte
             vap->radio_index = map->rdk_radio_index;
             vap->vap_index = map->index;
             strcpy(vap->vap_name, map->vap_name);
+            vap->vap_mode = is_wifi_hal_vap_mesh_sta(vap->vap_index) ? wifi_vap_mode_sta :
+                                                                       wifi_vap_mode_ap;
             return 0;
         }
     }
@@ -2174,6 +2350,94 @@ static int find_country_code_match(const char *const cc[], const char *const cou
 
     return RETURN_ERR;
 }
+#ifdef RDKB_ONE_WIFI_PROD
+#define NUM_RADIOS 3
+
+static bool parse_wiphy_band_mapping(FILE *fp, int *pcie_index) {
+    char line[LINE_MAX];
+    int curr_phy_idx;
+    bool in_wiphy = false;
+
+    while (fgets(line, sizeof(line), fp)) {
+        // Detect start of Wiphy
+        char *wiphy_ptr = strstr(line, "Wiphy ");
+        if (wiphy_ptr == line) {
+            // Example: "Wiphy phy2"
+            if (sscanf(line, "Wiphy phy%d", &curr_phy_idx) == 1) {
+                in_wiphy = true;
+            }
+            continue;
+        }
+        // If in a Wiphy stanza, look for "Band N:"
+        if (in_wiphy) {
+            // Skip leading spaces
+            char *trimmed = line;
+            while (*trimmed == ' ' || *trimmed == '\t') ++trimmed;
+
+            // Look for "Band N:"
+            if (strncmp(trimmed, "Band ", 5) == 0) {
+                int band_num;
+                if (sscanf(trimmed, "Band %d:", &band_num) == 1) {
+                    --band_num; /* The iw tool prints nl_band->nla_type + 1 */
+                    if (curr_phy_idx < NUM_RADIOS &&
+                        ((band_num < NUM_NL80211_BANDS) && (band_num >= 0)))
+                        pcie_index[curr_phy_idx] = ((band_num == NL80211_BAND_6GHZ) ? 2 : band_num);
+                    else {
+                        wifi_hal_error_print("%s:%d: Recieved phy_index:%d Num Radios:%d \
+                            band_num:%d NUM_NL80211_BANDS:%d\n", __func__, __LINE__, \
+                            curr_phy_idx, NUM_RADIOS, band_num, NUM_NL80211_BANDS);
+                        return false;
+                    }
+                } else {
+                    wifi_hal_error_print("%s:%d: Unable to read the band num %s\n", __func__, __LINE__, trimmed);
+                    return false;
+                }
+                in_wiphy = false;
+            }
+        }
+    }
+    return true;
+}
+
+static void remap_phy_index(wifi_interface_name_idex_map_t *map, int map_size, const int *pcie_index, int pcie_size)
+{
+    for (int i = 0; i < map_size; ++i) {
+        if (!map[i].interface_name)
+            continue;
+
+        // Find the digit after "wl" (e.g., wl0.1, wl1, etc)
+        char *p = map[i].interface_name;
+        if (strncmp(p, "wl", 2) != 0)
+            continue;
+
+        p += 2;
+        if (!isdigit((unsigned char)*p))
+            continue;
+
+        int idx = *p - '0';  // Get the integer
+        if (idx < 0 || idx >= pcie_size)
+            continue;
+        if (pcie_index[idx] != -1) {
+            map[i].phy_index = pcie_index[idx];
+        } else {
+            wifi_hal_error_print("%s:%d: idx:%d doesnt exist \n", __func__, __LINE__, idx);
+        }
+    }
+}
+
+void remap_wifi_interface_name_index_map() {
+    FILE *fp;
+    int pcie_index[NUM_RADIOS] = {-1, -1, -1};
+
+    fp = popen("iw list", "r");
+    if (parse_wiphy_band_mapping(fp, pcie_index)) {
+        remap_phy_index(interface_index_map, sizeof(interface_index_map)/sizeof(interface_index_map[0]),
+            pcie_index, NUM_RADIOS);
+    }
+    pclose(fp);
+}
+
+#endif /* RDKB_ONE_WIFI_PROD */
 
 int get_wifi_op_class_info(wifi_countrycode_type_t country_code, wifi_country_radio_op_class_t *op_classes)
 {
@@ -2250,7 +2514,6 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     memset(&cc_op_class, 0, sizeof(cc_op_class));
 
     get_wifi_op_class_info(param->countryCode, &cc_op_class);
-
 
     // country code match
     if (cc_op_class.cc != param->countryCode) {
@@ -4052,6 +4315,7 @@ static inline int json_parse_interface_map(cJSON *json)
     cJSON *inteface_list;
     cJSON *interface_elm;
     cJSON *interface_name;
+    cJSON *mld_interface_name;
     cJSON *bridge;
     cJSON *vlan_id;
     cJSON *vap_index;
@@ -4179,8 +4443,8 @@ static inline int json_parse_interface_map(cJSON *json)
     tmp_intf_idx_map = NULL;
     tmp_radio_interface_map = NULL;
 
-    if (!((tmp_intf_idx_map = malloc(sizeof(*tmp_intf_idx_map) * interface_idx_map_size)) &&
-            (tmp_radio_interface_map = malloc(
+    if (!((tmp_intf_idx_map = calloc(1, sizeof(*tmp_intf_idx_map) * interface_idx_map_size)) &&
+            (tmp_radio_interface_map = calloc(1,
                  sizeof(*tmp_radio_interface_map) * radio_interface_map_size)))) {
         wifi_hal_error_print("%s:%d: Failed to allocate interface_idx_map(%d - %u "
                              "bytes) or radio_interface_map_size(%d - %u bytes)\n",
@@ -4229,6 +4493,7 @@ static inline int json_parse_interface_map(cJSON *json)
             cJSON_ArrayForEach(interface_elm, inteface_list)
             {
                 interface_name = cJSON_GetObjectItem(interface_elm, "InterfaceName");
+                mld_interface_name = cJSON_GetObjectItem(interface_elm, "MldName");
                 bridge = cJSON_GetObjectItem(interface_elm, "Bridge");
                 vlan_id = cJSON_GetObjectItem(interface_elm, "vlanId");
                 vap_index = cJSON_GetObjectItem(interface_elm, "vapIndex");
@@ -4248,6 +4513,13 @@ static inline int json_parse_interface_map(cJSON *json)
                     .interface_name[(sizeof(tmp_intf_idx_map[i_idx].interface_name) /
                                         sizeof(*tmp_intf_idx_map[i_idx].interface_name)) -
                         1] = '\0';
+
+                // MldName is optional
+                if (mld_interface_name != NULL && cJSON_IsString(mld_interface_name)) {
+                    strncpy(tmp_intf_idx_map[i_idx].mld_interface_name,
+                        cJSON_GetStringValue(mld_interface_name),
+                        sizeof(tmp_intf_idx_map[i_idx].mld_interface_name) - 1);
+                }
 
                 strncpy(tmp_intf_idx_map[i_idx].bridge_name, cJSON_GetStringValue(bridge),
                     (sizeof(tmp_intf_idx_map[i_idx].bridge_name) /
@@ -4342,12 +4614,13 @@ void init_interface_map(void)
     wifi_hal_info_print("%s:%d: Interface Index Map(%u):\n", __func__, __LINE__,
         interface_index_map_size);
     for (i = 0; i < interface_index_map_size; i++) {
-        wifi_hal_info_print("\t[%u]={phy_index:%u, rdk_radio_index:%u, interface_name:%s, "
-                            "bridge_name:%s, vlan_id:%d, index:%u, vap_name:%s}\n",
+        wifi_hal_info_print(
+            "\t[%u]={phy_index:%u, rdk_radio_index:%u, interface_name:%s, "
+            "mld_interface_name:%s, bridge_name:%s, vlan_id:%d, index:%u, vap_name:%s}\n",
             i, interface_index_map[i].phy_index, interface_index_map[i].rdk_radio_index,
-            interface_index_map[i].interface_name, interface_index_map->bridge_name,
-            interface_index_map[i].vlan_id, interface_index_map[i].index,
-            interface_index_map[i].vap_name);
+            interface_index_map[i].interface_name, interface_index_map[i].mld_interface_name,
+            interface_index_map[i].bridge_name, interface_index_map[i].vlan_id,
+            interface_index_map[i].index, interface_index_map[i].vap_name);
     }
 
     wifi_hal_info_print("%s:%d: Radio Interface Index Map(%u):\n", __func__, __LINE__,
@@ -4363,29 +4636,20 @@ void init_interface_map(void)
 
 void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_index)
 {
-    unsigned int i;
-    const char *vap_name_str = NULL;
-    const char *suffix = NULL;
-
-    for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
-        if (interface_index_map[i].rdk_radio_index == rdk_radio_index) {
-            wifi_hal_info_print("%s:%d: Found vap_name:%s for rdk_radio_index:%u\n",
-                                __func__, __LINE__, interface_index_map[i].vap_name, rdk_radio_index);
-
-            vap_name_str = interface_index_map[i].vap_name;
-            suffix = strrchr(vap_name_str, '_');
-
-            if (suffix && strlen(suffix + 1) > 0) {
-                strncat((char *)vap_name, suffix + 1, sizeof(wifi_vap_name_t) - strlen(vap_name) - 1);
-                wifi_hal_info_print("%s:%d: Updated vap_name to %s for rdk_radio_index:%u\n",
-                                    __func__, __LINE__, vap_name, rdk_radio_index);
-                return;
-            }
-        }
+    switch (rdk_radio_index) {
+    case 0:
+        strncat((char *)vap_name, "2g", strlen("2g") + 1);
+        break;
+    case 1:
+        strncat((char *)vap_name, "5g", strlen("5g") + 1);
+        break;
+    case 2:
+        strncat((char *)vap_name, "6g", strlen("6g") + 1);
+        break;
+    default:
+        wifi_hal_error_print("%s:%d: Invalid rdk_radio_index:%d for vap_name:%s\n", __func__,
+            __LINE__, rdk_radio_index, vap_name);
     }
-
-    wifi_hal_error_print("%s:%d: Failed to find valid suffix for vap_name:%s "
-                         "for rdk_radio_index:%u\n", __func__, __LINE__, vap_name, rdk_radio_index);
 }
 
 int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
@@ -4447,4 +4711,275 @@ int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
     wifi_hal_error_print("%s:%d: Interface:%s not present in interface_index_map\n", __func__,
         __LINE__, ifname);
     return -1;
+}
+
+char *wifi_hal_get_mld_name_by_interface_name(char *ifname)
+{
+    for (unsigned int i = 0; i < get_sizeof_interfaces_index_map(); i++) {
+        if (interface_index_map[i].mld_interface_name[0] == '\0') {
+            continue;
+        }
+        if ((strncmp(ifname, interface_index_map[i].interface_name,
+                 sizeof(interface_index_map[i].interface_name)) == 0)) {
+            return interface_index_map[i].mld_interface_name;
+        }
+    }
+    return NULL;
+}
+
+char *wifi_hal_get_interface_name(wifi_interface_info_t *interface)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return NULL;
+    }
+
+    if (interface->mld_name[0] == '\0') {
+        return interface->name;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap &&
+        interface->vap_info.u.bss_info.mld_info.common_info.mld_enable) {
+        return interface->mld_name;
+    }
+
+    return interface->name;
+}
+
+bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return false;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        return interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;
+    }
+
+    return false;
+}
+
+int wifi_hal_set_mld_enabled(wifi_interface_info_t *interface, bool enabled)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        interface->vap_info.u.bss_info.mld_info.common_info.mld_enable = enabled;
+        return 0;
+    }
+
+    return -1;
+}
+
+#ifndef NL80211_DRV_LINK_ID_NA
+#define NL80211_DRV_LINK_ID_NA (-1)
+#endif
+
+int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return NL80211_DRV_LINK_ID_NA;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return NL80211_DRV_LINK_ID_NA;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        return interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
+    }
+
+    return NL80211_DRV_LINK_ID_NA;
+}
+
+int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id = link_id;
+        return 0;
+    }
+
+    return -1;
+}
+
+uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return NULL;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return NULL;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        return interface->vap_info.u.bss_info.mld_info.common_info.mld_addr;
+    }
+
+    return NULL;
+}
+
+int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        memcpy(interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, mac,
+            sizeof(mac_address_t));
+        return 0;
+    }
+
+    return -1;
+}
+
+wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info_t *interface,
+    int link_id)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
+
+    if (link_id < 0) {
+        return interface;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return interface;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return interface;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            // TODO: multiple mld support
+            if (wifi_hal_get_mld_link_id(interface_iter) == link_id) {
+                return interface_iter;
+            }
+        }
+    }
+
+    return interface;
+}
+
+wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t *interface,
+    uint32_t freq)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
+
+    if (freq == 0) {
+        return interface;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return interface;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return interface;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            // TODO: multiple mld support
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            if (interface_iter->u.ap.iface.freq == freq) {
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+                return interface_iter;
+            }
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        }
+    }
+
+    return interface;
+}
+
+wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_info_t *interface,
+    mac_address_t mac)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return memcmp(interface->mac, mac, sizeof(mac_address_t)) == 0 ? interface : NULL;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return NULL;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            if (memcmp(interface_iter->mac, mac, sizeof(mac_address_t)) == 0) {
+                return interface_iter;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
+{
+    int fd;
+    struct ifreq ifr;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        wifi_hal_error_print("%s:%d Failed to create socket, error: %s", __func__, __LINE__,
+            strerror(errno));
+        return -1;
+    }
+
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+
+    if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
+        wifi_hal_error_print("%s:%d Failed to get MAC address, error: %s", __func__, __LINE__,
+            strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+
+    memcpy(mac, ifr.ifr_hwaddr.sa_data, sizeof(mac_address_t));
+
+    return 0;
 }

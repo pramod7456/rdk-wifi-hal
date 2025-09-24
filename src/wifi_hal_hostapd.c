@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -498,10 +498,11 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->wpa_key_mgmt_rsno = 0;
 #endif /* HOSTAPD_VERSION >= 210 */
 
-#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && \
+    !defined(BANANA_PI_PORT)
     conf->wpa_key_mgmt_rsno_2 = 0;
     conf->rsn_pairwise_rsno_2 = 0;
-#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 && !BANANA_PI_PORT */
 
     conf->wpa = 0;
     memset(&test_ip, 0, sizeof(test_ip));
@@ -572,7 +573,8 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->wpa_key_mgmt = WPA_KEY_MGMT_PSK;
 #if HOSTAPD_VERSION >= 210
             conf->wpa_key_mgmt_rsno = WPA_KEY_MGMT_SAE;
-#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && \
+    !defined(BANANA_PI_PORT)
             if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
                 conf->wpa_key_mgmt = WPA_KEY_MGMT_SAE;
                 conf->wpa_key_mgmt_rsno = 0;
@@ -583,7 +585,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             }
             wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d wpa_key_mgmt:%d wpa_key_mgmt_rsno_2:%d \n",
                 __FUNCTION__, __LINE__, conf->iface, conf->disable_11be, conf->wpa_key_mgmt, conf->wpa_key_mgmt_rsno_2);
-#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 && !BANANA_PI_PORT */
             conf->sae_pwe = 2;
 #endif /* HOSTAPD_VERSION >= 210 */
             conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
@@ -682,7 +684,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 
         case wifi_security_mode_wpa_wpa2_personal:
         case wifi_security_mode_wpa_wpa2_enterprise:
-            conf->wpa = 1;
+            conf->wpa = 3;
             break;
 
         case wifi_security_mode_none:
@@ -1112,9 +1114,6 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 
 #ifdef CONFIG_IEEE80211BE
     conf->disable_11be = !radio->iconf.ieee80211be;
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
-    conf->mld_ap = vap->u.bss_info.mld_info.common_info.mld_enable;
-#endif
 #endif /* CONFIG_IEEE80211BE */
 
     strcpy(conf->iface, interface->name);
@@ -2011,6 +2010,9 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 #endif /* CONFIG_ACS */
 
 #ifdef CONFIG_IEEE80211AX
+#if defined(BANANA_PI_PORT) && HOSTAPD_VERSION >= 211
+    iconf->he_phy_capab.he_ldpc = 1;
+#endif // BANANA_PI_PORT && HOSTAPD_VERSION >= 211
     iconf->he_op.he_rts_threshold = 0;
     iconf->he_op.he_default_pe_duration = 4;
 #if HOSTAPD_VERSION >= 210
@@ -2288,9 +2290,13 @@ static void wpa_sm_sta_set_state(void *ctx, enum wpa_states state)
         wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
         if (callbacks->sta_conn_status_callback) {
             memcpy(&bss, &interface->u.sta.backhaul, sizeof(wifi_bss_info_t));
-
+#ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
+            sta.vap_index = interface->index;
+#else
             sta.vap_index = vap->vap_index;
+#endif
             sta.connect_status = wifi_connection_status_disconnected;
+
 
             callbacks->sta_conn_status_callback(vap->vap_index, &bss, &sta);
         }
@@ -2422,10 +2428,17 @@ static int wpa_sm_sta_ether_send(void *ctx, const u8 *dest, u16 proto, const u8 
 #if HOSTAPD_VERSION >= 210 //2.10
         int encrypt;
         mac_addr_str_t mac_str;
+#ifdef CONFIG_GENERIC_MLO
+        int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+        int link_id = -1;
+#endif // CONFIG_GENERIC_MLO
+
         encrypt = interface->u.sta.wpa_sm && wpa_sm_has_ptk_installed(interface->u.sta.wpa_sm);
         wifi_hal_info_print("%s:%d: Sending eapol via control port to sta:%s on interface:%s encrypt:%d\n", __func__, __LINE__,
             to_mac_str(dest, mac_str), interface->name, encrypt);
-        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt))) {
+        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt,
+                 link_id))) {
             wifi_hal_error_print("%s:%d: eapol send failed\n", __func__, __LINE__);
             return -1;
         }
@@ -2486,6 +2499,9 @@ static int wpa_sm_sta_get_beacon_ie(void *ctx)
     wifi_bss_info_t *backhaul;
     wifi_bss_info_t *bss;
     ieee80211_tlv_t *rsn_ie = NULL;
+#if HOSTAPD_VERSION >= 210
+    ieee80211_tlv_t *rsnx_ie = NULL;
+#endif
     int ret = -1;
 
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
@@ -2499,13 +2515,27 @@ static int wpa_sm_sta_get_beacon_ie(void *ctx)
         if (memcmp(backhaul->bssid, bss->bssid, sizeof(bssid_t)) == 0 && bss->ie != NULL) {
 
             rsn_ie = (ieee80211_tlv_t *)get_ie((unsigned char *)bss->ie, bss->ie_len, WLAN_EID_RSN);
+#if HOSTAPD_VERSION >= 210
+            rsnx_ie = (ieee80211_tlv_t *)get_ie((unsigned char *)bss->ie, bss->ie_len,
+                WLAN_EID_RSNX);
+            if (rsn_ie == NULL && rsnx_ie == NULL) {
+#else
             if (rsn_ie == NULL) {
+#endif
                 bss = hash_map_get_next(interface->scan_info_map, bss);
                 continue;
             }
 
-            ret = wpa_sm_set_ap_rsn_ie(interface->u.sta.wpa_sm, (const unsigned char *)rsn_ie,
-                rsn_ie->length + sizeof(ieee80211_tlv_t));
+            if (rsn_ie != NULL) {
+                ret = wpa_sm_set_ap_rsn_ie(interface->u.sta.wpa_sm, (const unsigned char *)rsn_ie,
+                    rsn_ie->length + sizeof(ieee80211_tlv_t));
+            }
+#if HOSTAPD_VERSION >= 210
+            if (rsnx_ie != NULL) {
+                ret = wpa_sm_set_ap_rsnxe(interface->u.sta.wpa_sm, (const unsigned char *)rsnx_ie,
+                    rsnx_ie->length + sizeof(ieee80211_tlv_t));
+            }
+#endif
             pthread_mutex_unlock(&interface->scan_info_mutex);
             return ret;
         }
@@ -2568,7 +2598,9 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     int wpa_key_mgmt_11w = 0;
     ieee80211_tlv_t *rsn_ie = NULL;
     unsigned short max_wpa_ie_len = 500;
-
+#if HOSTAPD_VERSION >= 210
+    unsigned short max_rsnx_ie_len = 50;
+#endif
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
     backhaul = &interface->u.sta.backhaul;
@@ -2675,8 +2707,32 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, WPA_CIPHER_NONE);
             wpa_sm_set_param(sm, WPA_PARAM_GROUP, WPA_CIPHER_NONE);
         } else {
-            sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
-                WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+#if defined(CONFIG_WIFI_EMULATOR)
+            if (sec->mode != wifi_security_mode_none) {
+                if (sec->mode == wifi_security_mode_wpa2_personal) {
+                    sel = (WPA_KEY_MGMT_PSK | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_wpa2_enterprise) {
+                    sel = (WPA_KEY_MGMT_IEEE8021X | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_wpa3_transition) {
+                    sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w) &
+                        data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_wpa3_personal) {
+                    sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
+                    sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
+                    sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE) & data.key_mgmt;
+                } else {
+                    wifi_hal_error_print("Unsupported security mode : 0x%x\n", sec->mode);
+                    return;
+                }
+            } else
+#endif
+            {
+                sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
+                    WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+            }
+
             key_mgmt = pick_akm_suite(sel); 
 
             if (key_mgmt == -1) {
@@ -2742,12 +2798,29 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         if (ie) {
             ie_len = max_wpa_ie_len;
             if (wpa_sm_set_assoc_wpa_ie_default(sm, ie, &ie_len)) {
-                os_free(ie);
                 wifi_hal_dbg_print("Failures in wpa_sm_set_assoc_wpa_ie_default");
-                ie = NULL;
             }
+            os_free(ie);
+            ie = NULL;
+            ie_len = 0;
         }
     }
+#if HOSTAPD_VERSION >= 210
+    if (get_ie_by_eid(WLAN_EID_RSNX, assoc_req, interface->u.sta.assoc_req_len, &ie, &ie_len) ==
+        true) {
+        wpa_sm_set_assoc_rsnxe(sm, ie, ie_len);
+    } else {
+        ie = os_malloc(max_rsnx_ie_len);
+        ie_len = max_rsnx_ie_len;
+        if (ie) {
+            if (wpa_sm_set_assoc_rsnxe_default(sm, ie, &ie_len)) {
+                wifi_hal_dbg_print("Failed to add rsnxe default value");
+            }
+            os_free(ie);
+            ie = NULL;
+        }
+    }
+#endif
     wpa_sm_notify_assoc(sm, sm->bssid);
     wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
 }
@@ -2996,7 +3069,46 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                     sec->u.radius.eap_type);
                 //return;
             }
-#ifndef CONFIG_WIFI_EMULATOR //DL-CHECK
+#ifdef CONFIG_WIFI_EMULATOR
+            if (vap->vap_mode == wifi_vap_mode_sta) {
+                if (interface->wpa_s.current_ssid->eap.openssl_ciphers == NULL) {
+                    interface->wpa_s.current_ssid->eap.openssl_ciphers = (char *)malloc(
+                        MAX_STR_LEN);
+                    if (interface->wpa_s.current_ssid->eap.openssl_ciphers == NULL) {
+                        wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
+                        return;
+                    }
+                }
+                memset(interface->wpa_s.current_ssid->eap.openssl_ciphers, 0, MAX_STR_LEN);
+                strncpy(interface->wpa_s.current_ssid->eap.openssl_ciphers, SUPPORTED_CIPHERS,
+                    MAX_STR_LEN - 1);
+                if (interface->wpa_s.current_ssid->eap.phase2 == NULL) {
+                    interface->wpa_s.current_ssid->eap.phase2 = (char *)malloc(MAX_STR_LEN);
+                    if (interface->wpa_s.current_ssid->eap.phase2 == NULL) {
+                        wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
+                        return;
+                    }
+                }
+                memset(interface->wpa_s.current_ssid->eap.phase2, 0, MAX_STR_LEN);
+                switch (sec->u.radius.phase2) {
+                case WIFI_EAP_PHASE2_PAP:
+                    strncpy(interface->wpa_s.current_ssid->eap.phase2, "auth=PAP", MAX_STR_LEN - 1);
+                    break;
+                default:
+                    // using PAP as default value.
+                    strncpy(interface->wpa_s.current_ssid->eap.phase2, "auth=PAP", MAX_STR_LEN - 1);
+                    break;
+                }
+            }
+            interface->wpa_s.current_ssid->eap.fragment_size = 400;
+            interface->wpa_s.current_ssid->eap.identity = (unsigned char *)&sec->u.radius.identity;
+            interface->wpa_s.current_ssid->eap.identity_len = strlen(sec->u.radius.identity);
+            interface->wpa_s.current_ssid->eap.password = (unsigned char *)&sec->u.radius.key;
+            interface->wpa_s.current_ssid->eap.password_len = strlen(sec->u.radius.key);
+            interface->wpa_s.current_ssid->eap.eap_methods = &interface->u.sta.wpa_eapol_method;
+            eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
+            
+#else
             if (vap->vap_mode == wifi_vap_mode_sta) {
                 wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
@@ -3016,8 +3128,8 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                         return;
                     }
                 }
-                memset(interface->u.sta.wpa_eapol_config.phase2, 0, MAX_STR_LEN);
-		wifi_hal_dbg_print("%s:%d: phase2 : %d\n", __func__, __LINE__, sec->u.radius.phase2);
+		memset(interface->u.sta.wpa_eapol_config.phase2, 0, MAX_STR_LEN);
+	        wifi_hal_dbg_print("%s:%d: phase2 : %d\n", __func__, __LINE__, sec->u.radius.phase2);
                 switch (sec->u.radius.phase2) {
                 case WIFI_EAP_PHASE2_PAP:
                     strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP", MAX_STR_LEN - 1);
@@ -3030,26 +3142,86 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 }
             }
             interface->u.sta.wpa_eapol_config.fragment_size = 400;
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+      	    wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
-#endif // CONFIG_WIFI_EMULATOR
-            interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
-            interface->u.sta.wpa_eapol_config.identity = (unsigned char *)identity;
-            interface->u.sta.wpa_eapol_config.identity_len = strlen(identity);
-            interface->u.sta.wpa_eapol_config.password = (unsigned char *)password;
-            interface->u.sta.wpa_eapol_config.password_len = strlen(password);
             interface->u.sta.wpa_eapol_config.anonymous_identity = (unsigned char*)anonymous_identity;
 	    interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(anonymous_identity);
+#endif // CONFIG_WIFI_EMULATOR
+            interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
+            interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
 
-         //   interface->u.sta.wpa_eapol_config.cert.ca_cert = (unsigned char *)ca_cert;
-         //   interface->u.sta.wpa_eapol_config.cert.domain_match = (unsigned char *)domain_match;
-            //interface->u.sta.wpa_eapol_config.cert.subject_match = (unsigned char *)subject_match;
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
+            interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
+            interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
+            interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
 
             interface->u.sta.wpa_eapol_config.eap_methods = &interface->u.sta.wpa_eapol_method;
-            eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol, &interface->u.sta.wpa_eapol_config, NULL);
+            eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol, &interface->u.sta.wpa_eapol_config, NULL);	
+	} 
+    }
+} 
+	    
+	   
+static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
+{
+    int ret;
+
+#if HOSTAPD_VERSION >= 211 //2.11
+    ret = hostapd_setup_bss(hapd, 1, true);
+#elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
+    ret = hostapd_setup_bss(hapd, 1, true);
+#else
+    ret = hostapd_setup_bss(hapd, 1);
+#endif
+    return ret;
+}
+
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+static int set_mld_shared_resources(struct hostapd_data *hapd)
+{
+    int ret;
+
+    if (hapd->mld != NULL && hostapd_mld_is_first_bss(hapd)) {
+        struct hostapd_data *link;
+        for_each_mld_link(link, hapd) {
+            if (hapd == link)
+                continue;
+
+            ret = hostapd_setup_bss_internal(link);
+            if (ret) {
+                wifi_hal_error_print("%s:%d: set shared resources failed for link: %s\n",
+                    __func__, __LINE__, hapd->conf->iface);
+                return RETURN_ERR;
+            }
         }
     }
+    return RETURN_OK;
+}
+
+static void clear_mld_shared_resources(struct hostapd_data *hapd)
+{
+    if (hapd->mld != NULL && hostapd_mld_is_first_bss(hapd)) {
+        struct hostapd_data *link;
+        for_each_mld_link(link, hapd) {
+            if (hapd == link)
+                continue;
+            hostapd_bss_deinit_no_free(link);
+            hostapd_free_hapd_data(link);
+        }
+    }
+}
+#endif /* HOSTAPD_VERSION >= 211 */
+#endif /* CONFIG_IEEE80211BE */
+
+void deinit_bss(struct hostapd_data *hapd)
+{
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    clear_mld_shared_resources(hapd);
+#endif
+#endif
+    hostapd_bss_deinit_no_free(hapd);
+    hostapd_free_hapd_data(hapd);
 }
 
 int start_bss(wifi_interface_info_t *interface)
@@ -3075,20 +3247,21 @@ int start_bss(wifi_interface_info_t *interface)
             __LINE__, interface->u.ap.hapd.csa_in_progress, vap->vap_name, vap->vap_index);
     }
     //my_print_hex_dump(conf->ssid.ssid_len, conf->ssid.ssid);
-#if HOSTAPD_VERSION >= 211 //2.11
-    ret = hostapd_setup_bss(hapd, 1, true);
-#elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
-    ret = hostapd_setup_bss(hapd, 1, true);
-#else
-    ret = hostapd_setup_bss(hapd, 1);
-#endif
-
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
+    ret = hostapd_setup_bss_internal(hapd);
     if (ret != RETURN_OK) {
         wifi_hal_error_print("%s:%d: vap:%s:%d create is failed:%d csa status:%d\n", __func__,
             __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
     }
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    ret = set_mld_shared_resources(hapd);
+    if (ret != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: vap:%s:%d mld set shared resources failed:%d csa status:%d\n", __func__,
+            __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
+    }
+#endif
+#endif
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     return ret;
 }

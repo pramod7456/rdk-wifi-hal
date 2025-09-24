@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -153,10 +153,10 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
      * returned HAL capabilities but this routine tweaks HAL caps based on platform and
      * it's requirements.
      */
-#if defined(_SKY_HUB_COMMON_PRODUCT_REQ_) && !defined(_SR213_PRODUCT_REQ_) && !defined(_SCER11BEL_PRODUCT_REQ_)
+#if defined(_SKY_HUB_COMMON_PRODUCT_REQ_) && !defined(_SR213_PRODUCT_REQ_) && !defined(_SCER11BEL_PRODUCT_REQ_) && !defined(_SCXF11BFL_PRODUCT_REQ_)
     /* For SKY platforms, set as per _SKY macro defined */
     hal->wifi_prop.BssMaxStaAllow = BSS_MAX_NUM_STA_SKY;
-#elif defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT)
+#elif defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(SCXF10_PORT)
     /* For TCHXB8 platforms, set as per _XB8 macro defined */
     hal->wifi_prop.BssMaxStaAllow = BSS_MAX_NUM_STA_XB8;
 #else
@@ -442,7 +442,11 @@ INT wifi_hal_init()
     while (lsmod_by_name(drv_name) == false) {
         usleep(5000);
     }
-
+    #ifdef RDKB_ONE_WIFI_PROD
+    /* Remap the interfaces depending on the Wiphy enumeration
+    * in the kernel */
+    remap_wifi_interface_name_index_map();
+    #endif /* RDKB_ONE_WIFI_PROD */
     pthread_mutexattr_init(&g_wifi_hal.hapd_lock_attr);
     pthread_mutexattr_settype(&g_wifi_hal.hapd_lock_attr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&g_wifi_hal.hapd_lock, &g_wifi_hal.hapd_lock_attr);
@@ -459,9 +463,17 @@ INT wifi_hal_init()
         wifi_hal_error_print("%s:%d: Failed to create the ECO mode interfaces\n", __func__, __LINE__);
     }
 
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
     if (nl80211_init_primary_interfaces() != 0) {
         return RETURN_ERR;
     }
+#endif //CONFIG_WIFI_EMULATOR_EXT_AGENT
+
+#ifdef CONFIG_GENERIC_MLO
+    if (nl80211_init_mld_links() != 0) {
+        return RETURN_ERR;
+    }
+#endif // CONFIG_GENERIC_MLO
 
     if (nl80211_init_radio_info() != 0) {
         return RETURN_ERR;
@@ -563,6 +575,13 @@ INT wifi_hal_pre_init()
         wifi_hal_info_print("%s:%d: platfrom pre init\n", __func__, __LINE__);
         pre_init_fn();
     }
+
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+    void hostapd_wpa_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+
+    wpa_supplicant_event = hostapd_wpa_event;
+#endif // BANANA_PI_PORT
+
     return RETURN_OK;
 }
 
@@ -802,7 +821,17 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
 
     memcpy((unsigned char *)&old_operationParam, (unsigned char *)&radio->oper_param, sizeof(wifi_radio_operationParam_t));
 
-    nl80211_interface_enable(primary_interface->name, operationParam->enable);
+    nl80211_interface_enable(wifi_hal_get_interface_name(primary_interface),
+        operationParam->enable);
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
+    if (nl80211_set_amsdu_tid(primary_interface, operationParam->amsduTid) != RETURN_OK)
+    {
+        wifi_hal_error_print(
+            "%s:%d:Failed to update AMSDU TID params ! AMSDU possibly out of sync \n",
+            __func__, __LINE__);
+        // fall-through, don't return error
+    }
+#endif
 
     if (radio->configured && radio->oper_param.enable != operationParam->enable) {
         memcpy((unsigned char *)&radio->oper_param, (unsigned char *)operationParam, sizeof(wifi_radio_operationParam_t));
@@ -819,15 +848,18 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         }
 
         while (interface != NULL) {
+            char *interface_name = wifi_hal_get_interface_name(interface);
+
             if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
-                wifi_hal_info_print("%s:%d: vap_index: %d interface name: %s vap_initialized: %d "
+                wifi_hal_info_print(
+                    "%s:%d: vap_index: %d interface name: %s vap_initialized: %d "
                     "bss started: %d vap enabled: %d radio configured: %d radio enabled: %d\n",
-                    __func__, __LINE__, interface->vap_info.vap_index, interface->name,
+                    __func__, __LINE__, interface->vap_info.vap_index, interface_name,
                     interface->vap_initialized, interface->bss_started,
                     interface->vap_info.u.bss_info.enabled, radio->configured,
                     radio->oper_param.enable);
                 if (radio->oper_param.enable && interface->vap_info.u.bss_info.enabled) {
-                    if (nl80211_interface_enable(interface->name, true) != 0) {
+                    if (nl80211_interface_enable(interface_name, true) != 0) {
                         ret = nl80211_retry_interface_enable(interface, true);
                         if (ret != 0) {
                             wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n",
@@ -844,8 +876,8 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
 
                 if (radio->oper_param.enable == false && interface->bss_started) {
                     /* Clear beacon interval in wdev by stoping AP */
-                    nl80211_interface_enable(interface->name, false);
-                    nl80211_interface_enable(interface->name, true);
+                    nl80211_interface_enable(interface_name, false);
+                    nl80211_interface_enable(interface_name, true);
                     interface->beacon_set = 0;
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                     hostapd_reload_config(interface->u.ap.hapd.iface);
@@ -857,8 +889,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                     nl80211_enable_ap(interface, false);
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-                    hostapd_bss_deinit_no_free(&interface->u.ap.hapd);
-                    hostapd_free_hapd_data(&interface->u.ap.hapd);
+                    deinit_bss(&interface->u.ap.hapd);
                     if (interface->u.ap.hapd.conf->ssid.wpa_psk && !interface->u.ap.hapd.conf->ssid.wpa_psk->next)
                         hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
                     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -867,7 +898,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                         return RETURN_ERR;
                     }
                     interface->bss_started = false;
-                    nl80211_interface_enable(interface->name, false);
+                    nl80211_interface_enable(interface_name, false);
                 }
             }
 
@@ -876,11 +907,11 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                     if (interface->u.sta.state == WPA_COMPLETED) {
                         nl80211_disconnect_sta(interface);
                     }
-                    nl80211_interface_enable(interface->name, false);
+                    nl80211_interface_enable(interface_name, false);
                 }
 
                 if (radio->oper_param.enable) {
-                    nl80211_interface_enable(interface->name, true);
+                    nl80211_interface_enable(interface_name, true);
                     wifi_drv_set_operstate(interface, 1);
                 }
             }
@@ -923,7 +954,10 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.operatingClass = operationParam->operatingClass;
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
-        radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
+		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
+		strncpy(radio->oper_param.radarDetected, operationParam->radarDetected,
+				sizeof(radio->oper_param.radarDetected)-1);
+		radio->oper_param.DFSTimer = operationParam->DFSTimer;
         memcpy(radio->oper_param.channel_map, operationParam->channel_map,
             sizeof(radio->oper_param.channel_map));
 
@@ -1317,6 +1351,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #if defined(VNTXER5_PORT)
     char mld_ifname[32];
 #endif
+    char *interface_name = NULL;
 
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(map);
@@ -1365,15 +1400,6 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
         }
 
-        wifi_hal_dbg_print("%s:%d: vap index:%d interface:%s basic_transmit_rates:%s, "
-            "oper_transmit_rates:%s, supp_transmit_rates:%s min_adv_mcs:%s "
-            "6GOpInfoMinRate:%s\n", __func__, __LINE__, vap->vap_index, interface->name,
-            vap->u.bss_info.preassoc.basic_data_transmit_rates,
-            vap->u.bss_info.preassoc.operational_data_transmit_rates,
-            vap->u.bss_info.preassoc.supported_data_transmit_rates,
-            vap->u.bss_info.preassoc.minimum_advertised_mcs,
-            vap->u.bss_info.preassoc.sixGOpInfoMinRate);
-
 #ifdef NL80211_ACL
         if ((vap->u.bss_info.enabled == 1) &&
             ((vap->u.bss_info.mac_filter_enable == TRUE) ||
@@ -1389,8 +1415,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             continue;
         }
 #endif
-        wifi_hal_info_print("%s:%d: vap index:%d interface:%s mode:%d vap_name:%s\n", __func__, __LINE__,
-            vap->vap_index, interface->name, vap->vap_mode, vap->vap_name);
+        wifi_hal_info_print("%s:%d: vap index:%d mode:%d vap_name:%s\n", __func__, __LINE__,
+            vap->vap_index, vap->vap_mode, vap->vap_name);
         if (vap->vap_mode == wifi_vap_mode_ap) {
             wifi_hal_info_print("%s:%d: vap_enable_status:%d\n", __func__, __LINE__, vap->u.bss_info.enabled);
             memcpy(vap->u.bss_info.bssid, interface->mac, sizeof(vap->u.bss_info.bssid));
@@ -1408,34 +1434,43 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif //!defined(CONFIG_WIFI_EMULATOR) || !defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         }
         memcpy((unsigned char *)&interface->vap_info, (unsigned char *)vap, sizeof(wifi_vap_info_t));
+        interface_name = wifi_hal_get_interface_name(interface);
 
-        wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
-        nl80211_interface_enable(interface->name, false);
-#ifndef CONFIG_WIFI_EMULATOR
+#ifdef CONFIG_GENERIC_MLO
+        // VAP down removes MLO links, so restrict down of interface to sta mode only
+        if (vap->vap_mode == wifi_vap_mode_sta) {
+#endif
+            wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
+            nl80211_interface_enable(interface->name, false);
+#ifdef CONFIG_GENERIC_MLO
+        }
+#endif
+
+#if  !defined(CONFIG_WIFI_EMULATOR) && !defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         if (vap->vap_mode == wifi_vap_mode_sta) {
             bool sta_4addr = 0;
             wifi_hal_info_print("%s:%d: interface:%s remove from bridge\n", __func__, __LINE__,
-                interface->name);
-            nl80211_remove_from_bridge(interface->name);
+                interface_name);
+            nl80211_remove_from_bridge(interface_name);
             if (get_sta_4addr_status(&sta_4addr) == RETURN_OK) {
                 interface->u.sta.sta_4addr = (int)sta_4addr;
             }
         }
 #endif
         wifi_hal_info_print("%s:%d: interface:%s set mode:%d\n", __func__, __LINE__,
-            interface->name, vap->vap_mode);
+            interface_name, vap->vap_mode);
         if (nl80211_update_interface(interface) != 0) {
             wifi_hal_error_print("%s:%d: interface:%s failed to set mode %d\n",__func__, __LINE__,
-                interface->name, vap->vap_mode);
+                interface_name, vap->vap_mode);
             return RETURN_ERR;
         }
 
         wifi_hal_info_print("%s:%d: interface:%s radio configured:%d radio enabled:%d\n",
-            __func__, __LINE__, interface->name, radio->configured, radio->oper_param.enable);
+            __func__, __LINE__, interface_name, radio->configured, radio->oper_param.enable);
         if (radio->configured && radio->oper_param.enable) {
             wifi_hal_info_print("%s:%d: interface:%s set up\n", __func__, __LINE__,
-                interface->name);
-            if (nl80211_interface_enable(interface->name, true) != 0) {
+                interface_name);
+            if (nl80211_interface_enable(interface_name, true) != 0) {
                 ret = nl80211_retry_interface_enable(interface, true);
                 if (ret != 0) {
                     wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n", __func__,
@@ -1447,55 +1482,55 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         if (vap->vap_mode == wifi_vap_mode_ap) {
             // create the bridge
             wifi_hal_info_print("%s:%d: interface:%s bss enabled:%d bridge:%s\n", __func__,
-                __LINE__, interface->name, vap->u.bss_info.enabled, vap->bridge_name);
+                __LINE__, interface_name, vap->u.bss_info.enabled, vap->bridge_name);
             if (vap->bridge_name[0] != '\0' && vap->u.bss_info.enabled) {
                 wifi_hal_info_print("%s:%d: interface:%s create bridge:%s\n", __func__, __LINE__,
-                    interface->name, vap->bridge_name);
+                    interface_name, vap->bridge_name);
 #if defined(VNTXER5_PORT)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d",  vap->vap_index);
                     if (nl80211_create_bridge(mld_ifname, vap->bridge_name) != 0) {
                         wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
-                            __func__, __LINE__, interface->name, vap->bridge_name);
+                            __func__, __LINE__, interface_name, vap->bridge_name);
                         continue;
                     }
                     wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
                          mld_ifname, vap->bridge_name);
                 }
-                else if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
+                else if (nl80211_create_bridge(interface_name, vap->bridge_name) != 0) {
 #else
-                if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
+                if (nl80211_create_bridge(interface_name, vap->bridge_name) != 0) {
 #endif
                     wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
-                        __func__, __LINE__, interface->name, vap->bridge_name);
+                        __func__, __LINE__, interface_name, vap->bridge_name);
                     continue;
                 }
                 wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
-                    interface->name, vap->bridge_name);
+                    interface_name, vap->bridge_name);
                 if (nl80211_interface_enable(vap->bridge_name, true) != 0) {
                     wifi_hal_error_print("%s:%d: interface:%s failed to set bridge %s up\n",
-                        __func__, __LINE__, interface->name, vap->bridge_name);
+                        __func__, __LINE__, interface_name, vap->bridge_name);
                     continue;
                 }
             }
 
             wifi_hal_info_print("%s:%d: interface:%s update hostapd params\n", __func__, __LINE__,
-                interface->name);
+                interface_name);
             if (update_hostap_interface_params(interface) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd params\n",
-                    __func__, __LINE__, interface->name);
+                    __func__, __LINE__, interface_name);
                 return RETURN_ERR;
             }
 
             wifi_hal_info_print("%s:%d: interface:%s vap_initialized:%d\n", __func__, __LINE__,
-                interface->name, interface->vap_initialized);
+                interface_name, interface->vap_initialized);
             if (interface->vap_initialized == true) {
                 wifi_hal_info_print("%s:%d: interface:%s bss_started:%d\n", __func__, __LINE__,
-                    interface->name, interface->bss_started);
+                    interface_name, interface->bss_started);
                 if (!(interface->bss_started)) {
                     if (vap->u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
                         wifi_hal_info_print("%s:%d: interface:%s enable ap\n", __func__,
-                            __LINE__, interface->name);
+                            __LINE__, interface_name);
                         interface->beacon_set = 0;
                         ret = start_bss(interface);
                         interface->bss_started = true;
@@ -1504,7 +1539,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     // reload vaps config
                     interface->beacon_set = 0;
                     wifi_hal_info_print("%s:%d: interface:%s reload hostapd config\n", __func__,
-                        __LINE__, interface->name);
+                        __LINE__, interface_name);
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                     hostapd_reload_config(interface->u.ap.hapd.iface);
 #ifdef CONFIG_SAE
@@ -1515,29 +1550,28 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
                     wifi_hal_info_print("%s:%d: interface:%s disable ap\n", __func__, __LINE__,
-                        interface->name);
+                        interface_name);
                     nl80211_enable_ap(interface, false);
 
                     wifi_hal_info_print("%s:%d: interface:%s free hostapd data\n", __func__,
-                        __LINE__, interface->name);
+                        __LINE__, interface_name);
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-                    hostapd_bss_deinit_no_free(&interface->u.ap.hapd);
-                    hostapd_free_hapd_data(&interface->u.ap.hapd);
+                    deinit_bss(&interface->u.ap.hapd);
                     if (interface->u.ap.hapd.conf->ssid.wpa_psk && !interface->u.ap.hapd.conf->ssid.wpa_psk->next)
                         hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
                     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
                     wifi_hal_info_print("%s:%d: interface:%s update hostapd params\n", __func__,
-                        __LINE__, interface->name);
+                        __LINE__, interface_name);
                     if (update_hostap_interface_params(interface) != RETURN_OK) {
                         wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd "
-                            "params\n", __func__, __LINE__, interface->name);
+                            "params\n", __func__, __LINE__, interface_name);
                         return RETURN_ERR;
                     }
 
                     if (vap->u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
                         wifi_hal_info_print("%s:%d: interface:%s enable ap\n", __func__,
-                            __LINE__, interface->name);
+                            __LINE__, interface_name);
                         interface->beacon_set = 0;
                         ret = start_bss(interface);
                         interface->bss_started = true;
@@ -1557,7 +1591,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 }
                 if (vap->u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
                     wifi_hal_info_print("%s:%d: interface:%s enable ap\n", __func__,
-                        __LINE__, interface->name);
+                        __LINE__, interface_name);
                     interface->beacon_set = 0;
                     ret = start_bss(interface);
                     interface->bss_started = true;
@@ -1565,8 +1599,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
             if (radio->configured && radio->oper_param.enable) {
                 wifi_hal_info_print("%s:%d: interface:%s set %s\n", __func__, __LINE__,
-                    interface->name, vap->u.bss_info.enabled ? "up" : "down");
-                nl80211_interface_enable(interface->name, vap->u.bss_info.enabled);
+                    interface_name, vap->u.bss_info.enabled ? "up" : "down");
+                nl80211_interface_enable(interface_name, vap->u.bss_info.enabled);
 #if defined(VNTXER5_PORT)
                 if(radio->oper_param.variant & WIFI_80211_VARIANT_BE)
                 {
@@ -1586,20 +1620,20 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         } else if (vap->vap_mode == wifi_vap_mode_sta) {
 #if defined(CONFIG_WIFI_EMULATOR)
-            if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
+            if (nl80211_create_bridge(interface_name, vap->bridge_name) != 0) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
-                        __func__, __LINE__, interface->name, vap->bridge_name);
+                        __func__, __LINE__, interface_name, vap->bridge_name);
             }
 
-            nl80211_interface_enable(interface->name, false);
+            nl80211_interface_enable(interface_name, false);
             nl80211_set_mac(interface);
             interface->vap_initialized = true;
-            nl80211_interface_enable(interface->name, true);
+            nl80211_interface_enable(interface_name, true);
             wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
-                    __LINE__, interface->name);
+                    __LINE__, interface_name);
             wifi_drv_set_operstate(interface, 1);
 
-            nl80211_interface_enable(interface->name, true);
+            nl80211_interface_enable(interface_name, true);
 #else
             //XXX set correct status after reconfigure and call conn status callback
             //nl80211_start_scan(interface);
@@ -1612,17 +1646,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif
             if (radio->configured && radio->oper_param.enable) {
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
-                    __LINE__, interface->name);
+                    __LINE__, interface_name);
                 wifi_drv_set_operstate(interface, 1);
-#ifdef TARGET_GEMINI7_2
-		if (!vap->u.sta_info.enabled) {
-                    nl80211_delete_interface(radio->index, interface->name, interface->index);
-		}
-#endif
             } else {
                 wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__,
-                    interface->name);
-                nl80211_interface_enable(interface->name, false);
+                    interface_name);
+                nl80211_interface_enable(interface_name, false);
             }
 #endif //CONFIG_WIFI_EMULATOR
         }
@@ -1630,11 +1659,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         if (vap->vap_mode == wifi_vap_mode_ap) {
 #if (defined(EASY_MESH_NODE) || defined(EASY_MESH_COLOCATED_NODE))
             if (isVapMeshBackhaul(vap->vap_index)) {
-#if defined(_PLATFORM_RASPBERRYPI_)
                 interface->vap_info.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
-#elif defined(_PLATFORM_BANANAPI_R4_)
-                vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
-#endif
             }
 #endif // EASY_MESH_NODE || EASY_MESH_COLOCATED_NODE
 #ifdef NL80211_ACL
@@ -1929,13 +1954,17 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         return RETURN_ERR;
     }
     vap = &interface->vap_info;
+    if (!vap->u.bss_info.enabled) {
+        wifi_hal_info_print("%s:%d Skipping addition of MAC Entry to ACL since %s is not enabled\n",__func__,__LINE__,interface->name);
+        return RETURN_OK;
+    }
 
     key = to_mac_str(DeviceMacAddress, sta_mac_str);
     
-    wifi_hal_dbg_print("%s:%d: Interface: %s MAC: %s\n", __func__, __LINE__, interface->name, key);
+    wifi_hal_info_print("%s:%d: Interface: %s MAC: %s\n", __func__, __LINE__, interface->name, key);
 
     if (vap->vap_mode != wifi_vap_mode_ap) {
-        wifi_hal_dbg_print("%s:%d: Not possible to add MAC ACL for STA device\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: Not possible to add MAC ACL for STA device\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
@@ -1944,7 +1973,7 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
 #ifdef CMXB7_PORT
         interface->acl_map = hash_map_create();
         if (interface->acl_map == NULL) {
-            wifi_hal_info_print("%s:%d: ACL map create failure for ap index %d\n", __func__, __LINE__, apIndex);
+            wifi_hal_error_print("%s:%d: ACL map create failure for ap index %d\n", __func__, __LINE__, apIndex);
             return RETURN_ERR;
         }
 #endif
@@ -1953,7 +1982,7 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
     acl_map = hash_map_get(interface->acl_map, key);
 
     if (acl_map != NULL) {
-        wifi_hal_dbg_print("%s:%d: MAC %s already present in acl list\n", __func__, __LINE__, key);
+        wifi_hal_error_print("%s:%d: MAC %s already present in acl list\n", __func__, __LINE__, key);
         return RETURN_ERR;
     }
 
@@ -1992,11 +2021,15 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
         return RETURN_ERR;
     }
     vap = &interface->vap_info;
+    if (!vap->u.bss_info.enabled) {
+        wifi_hal_info_print("%s:%d Skipping addition of MAC Entry to ACL since %s is not enabled\n",__func__,__LINE__,interface->name);
+        return RETURN_OK;
+    }
     
-    wifi_hal_dbg_print("%s:%d: Interface: %s MAC: %s\n",  __func__, __LINE__, interface->name, DeviceMacAddress);
+    wifi_hal_info_print("%s:%d: Interface: %s MAC: %s\n",  __func__, __LINE__, interface->name, DeviceMacAddress);
 
     if (vap->vap_mode != wifi_vap_mode_ap) {
-        wifi_hal_dbg_print("%s:%d: Not possible to add MAC ACL for STA device\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: Not possible to add MAC ACL for STA device\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
@@ -2014,7 +2047,7 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
     acl_map = hash_map_get(interface->acl_map, DeviceMacAddress);
 
     if (acl_map != NULL) {
-        wifi_hal_dbg_print("%s:%d: MAC %s already present in acl list\n", __func__, __LINE__, DeviceMacAddress);
+        wifi_hal_error_print("%s:%d: MAC %s already present in acl list\n", __func__, __LINE__, DeviceMacAddress);
         return RETURN_ERR;
     }
 
@@ -2060,22 +2093,22 @@ INT wifi_hal_delApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
 
     key = to_mac_str(sta_mac, sta_mac_str);
     
-    wifi_hal_dbg_print("%s:%d: Interface: %s MAC: %s\n", __func__, __LINE__, interface->name, key);
+    wifi_hal_info_print("%s:%d: Interface: %s MAC: %s\n", __func__, __LINE__, interface->name, key);
 
     if (vap->vap_mode != wifi_vap_mode_ap) {
-        wifi_hal_dbg_print("%s:%d: Not possible to del MAC ACL for STA device\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: Not possible to del MAC ACL for STA device\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
     if (interface->acl_map == NULL) {
-        wifi_hal_dbg_print("%s:%d: ACL map is NULL for ap index %d\n", __func__, __LINE__, apIndex);
+        wifi_hal_error_print("%s:%d: ACL map is NULL for ap index %d\n", __func__, __LINE__, apIndex);
         return RETURN_ERR;
     }
 
     acl_map = hash_map_get(interface->acl_map, key);
 
     if (acl_map == NULL) {
-        wifi_hal_dbg_print("%s:%d: MAC %s is not present in acl list\n", __func__, __LINE__, key);
+        wifi_hal_error_print("%s:%d: MAC %s is not present in acl list\n", __func__, __LINE__, key);
         return RETURN_ERR;
     }
 
@@ -2086,7 +2119,7 @@ INT wifi_hal_delApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
 
     if (nl80211_set_acl(interface) != 0) {
         acl_map = (acl_map_t *)malloc(sizeof(acl_map_t));
-
+        wifi_hal_error_print("%s:%d MAC %s nl80211_set_acl failure for interface:%s\n", __func__, __LINE__, key, interface->name);
         memcpy(acl_map->mac_addr_str, key, sizeof(mac_addr_str_t));
         memcpy(acl_map->mac_addr, DeviceMacAddress, sizeof(mac_addr_str_t));
 
@@ -2111,22 +2144,22 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
     }
     vap = &interface->vap_info;
     
-    wifi_hal_dbg_print("%s:%d: Interface: %s MAC: %s\n", __func__, __LINE__, interface->name, DeviceMacAddress);
+    wifi_hal_info_print("%s:%d: Interface: %s MAC: %s\n", __func__, __LINE__, interface->name, DeviceMacAddress);
 
     if (vap->vap_mode != wifi_vap_mode_ap) {
-        wifi_hal_dbg_print("%s:%d: Not possible to del MAC ACL for STA device\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: Not possible to del MAC ACL for STA device\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
     if (interface->acl_map == NULL) {
-        wifi_hal_dbg_print("%s:%d: ACL map is NULL for ap index %d\n", __func__, __LINE__, apIndex);
+        wifi_hal_error_print("%s:%d: ACL map is NULL for ap index %d\n", __func__, __LINE__, apIndex);
         return RETURN_ERR;
     }
 
     acl_map = hash_map_get(interface->acl_map, DeviceMacAddress);
 
     if (acl_map == NULL) {
-        wifi_hal_dbg_print("%s:%d: MAC %s is not present in acl list\n", __func__, __LINE__, DeviceMacAddress);
+        wifi_hal_error_print("%s:%d: MAC %s is not present in acl list\n", __func__, __LINE__, DeviceMacAddress);
         return RETURN_ERR;
     }
 
@@ -2137,7 +2170,7 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
 
     if (nl80211_set_acl(interface) != 0) {
         acl_map = (acl_map_t *)malloc(sizeof(acl_map_t));
-
+        wifi_hal_error_print("%s:%d MAC %s nl80211_set_acl failure for interface:%s\n", __func__, __LINE__, DeviceMacAddress, interface->name);
         memcpy(acl_map->mac_addr_str, DeviceMacAddress, sizeof(mac_addr_str_t));
         to_mac_bytes(acl_map->mac_addr_str, acl_map->mac_addr);
 
@@ -2915,19 +2948,21 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
-    uint freq, op_class, on_chan;
+    uint freq, op_class;
     uint i;
     char country[8] = { 0 };
     bool is_ap_mode = false;
     int radioIndex, res;
     ssid_t ssid_list[1] = { "" };
     bool is_active_scan = false;
+    uint current_channel = 0;
 
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] == ENTER (mode:%u, dwell_time:%d) ==\n", __func__, __LINE__,
-        scan_mode, dwell_time);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] == ENTER (mode:%u, dwell_time:%d) ==\n", __func__,
+        __LINE__, scan_mode, dwell_time);
 
     if (dwell_time < 0) {
-        wifi_hal_stats_error_print("%s:%d: invalid dwell time: %d\n", __func__, __LINE__, dwell_time);
+        wifi_hal_stats_error_print("%s:%d: invalid dwell time: %d\n", __func__, __LINE__,
+            dwell_time);
         return WIFI_HAL_INVALID_ARGUMENTS;
     }
 
@@ -2959,8 +2994,9 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
     op_class = radio->oper_param.operatingClass;
     {
         unsigned global_op_class = country_to_global_op_class(country, op_class);
-        wifi_hal_stats_dbg_print("%s:%d: [SCAN] country code: %s, op_class:%d, global_op_class:%d\n",
-            __func__, __LINE__, country, op_class, global_op_class);
+        wifi_hal_stats_dbg_print(
+            "%s:%d: [SCAN] country code: %s, op_class:%d, global_op_class:%d\n", __func__, __LINE__,
+            country, op_class, global_op_class);
     }
 
     /* Scanning is performed for the radio, so the status and results of the scan are stored in the
@@ -2969,15 +3005,15 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
 #if OPTION_GET_CHANNELS_FROM_HOSTAP == 0
     interface = get_primary_interface(radio);
     if (interface == NULL) {
-        wifi_hal_stats_error_print("%s:%d: [SCAN] primary interface for radio '%s' not found\n", __func__,
-            __LINE__, radio->name);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] primary interface for radio '%s' not found\n",
+            __func__, __LINE__, radio->name);
         return WIFI_HAL_ERROR;
     }
 #else
     interface = get_private_vap_interface(radio);
     if (interface == NULL) {
-        wifi_hal_stats_error_print("%s:%d: [SCAN] private interface for radio '%s' not found\n", __func__,
-            __LINE__, radio->name);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] private interface for radio '%s' not found\n",
+            __func__, __LINE__, radio->name);
         return WIFI_HAL_ERROR;
     }
 #endif
@@ -2988,16 +3024,17 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
             interface->scan_state);
 
         if (interface->scan_has_results & WIFI_SCAN_RES_COLLECTED_API) {
-            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Starting new scan, although results for radio %d "
-                               "(%s) from previous scan weren't collected\n",
+            wifi_hal_stats_dbg_print(
+                "%s:%d: [SCAN] Starting new scan, although results for radio %d "
+                "(%s) from previous scan weren't collected\n",
                 __func__, __LINE__, radioIndex, interface->name);
         }
 
         // - Check if scan was already triggered and is in progress
         if (interface->scan_state == WIFI_SCAN_STATE_STARTED) {
             pthread_mutex_unlock(&interface->scan_state_mutex);
-            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Scan already triggered for radio %d (%s)\n", __func__,
-                __LINE__, radioIndex, interface->name);
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Scan already triggered for radio %d (%s)\n",
+                __func__, __LINE__, radioIndex, interface->name);
             return WIFI_HAL_INTERNAL_ERROR;
         }
 
@@ -3005,7 +3042,7 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         interface->scan_state = WIFI_SCAN_STATE_NONE;
 
         /* Cleanup scan data (scan_info_ap_map[0]) before the new scan. Result data
-         *  (scan_info_ap_map[1]) stays unchanged. 
+         *  (scan_info_ap_map[1]) stays unchanged.
          */
         pthread_mutex_lock(&interface->scan_info_mutex);
         hash_map_cleanup(interface->scan_info_map);
@@ -3019,34 +3056,86 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
 
     if ((scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN) && (dwell_time == 0)) {
         // - special case:
-        wifi_hal_stats_dbg_print("%s:%d: [SCAN] On channel scan with dwell time 0 => not triggering "
-                           "scan, requesting scan results immediately\n",
+        wifi_hal_stats_dbg_print(
+            "%s:%d: [SCAN] On channel scan with dwell time 0 => not triggering "
+            "scan, requesting scan results immediately\n",
             __func__, __LINE__);
 
         // - get the current channel
-        on_chan = radio->oper_param.channel;
-        if (on_chan == 0) {
-            wifi_hal_stats_error_print("%s:%d: [SCAN] Channel is 0, failure!\n", __func__, __LINE__);
-            return WIFI_HAL_ERROR;
+        if (chan_num == 0 || chan_list == NULL) {
+            chan_num = 1;
+            current_channel = radio->oper_param.channel;
         }
 
-        if (RETURN_OK != wifi_channel_to_freq(country, op_class, on_chan, &freq)) {
-            wifi_hal_stats_error_print("%s:%d: [SCAN] Failed to get frequency for channel %u\n", __func__,
-                __LINE__, on_chan);
+        // - allocate space for freq list
+        if (RETURN_OK != set_freqs_filter(interface, chan_num, NULL))
             return WIFI_HAL_ERROR;
+
+        // - convert channels to freqs
+        for (i = 0; i < chan_num; i++) {
+            if (is_ap_mode) {
+                // - verify the channel number (it is possible only in AP mode)
+                int i_freq;
+#if OPTION_GET_CHANNELS_FROM_HOSTAP == 0
+                if (current_channel != 0) {
+                    i_freq = channel_is_valid_from_radio(radio, current_channel);
+                } else {
+                    i_freq = channel_is_valid_from_radio(radio, chan_list[i]);
+                }
+#else
+                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+                if (current_channel != 0) {
+                    i_freq = channel_is_valid_from_hapd(&interface->u.ap.hapd, current_channel);
+                } else {
+                    i_freq = channel_is_valid_from_hapd(&interface->u.ap.hapd, chan_list[i]);
+                }
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif // OPTION_GET_CHANNELS_FROM_HOSTAP
+                if (i_freq < 0) {
+                    if (current_channel != 0) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] channel %u is invalid for radio %d\n", __func__,
+                            __LINE__, current_channel, radioIndex);
+                    } else {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] channel %u is invalid for radio %d\n", __func__,
+                            __LINE__, chan_list[i], radioIndex);
+                    }
+                    return WIFI_HAL_ERROR;
+                }
+                freq = i_freq;
+            } else {
+                if (current_channel != 0) {
+                    if (RETURN_OK !=
+                        wifi_channel_to_freq(country, op_class, current_channel, &freq)) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] Couldn't get frequency for channel %u\n", __func__,
+                            __LINE__, current_channel);
+                        return WIFI_HAL_ERROR;
+                    }
+                } else {
+                    if (RETURN_OK != wifi_channel_to_freq(country, op_class, chan_list[i], &freq)) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] Couldn't get frequency for channel %u\n", __func__,
+                            __LINE__, chan_list[i]);
+                        return WIFI_HAL_ERROR;
+                    }
+                }
+
+                interface->scan_filter.values[i] = freq;
+                if (current_channel != 0) {
+                    wifi_hal_stats_dbg_print("%s:%d: [SCAN] chan:%u -> freq:%u (current channel)\n",
+                        __func__, __LINE__, current_channel, freq);
+                } else {
+                    wifi_hal_stats_dbg_print("%s:%d: [SCAN] chan:%u -> freq:%u\n", __func__,
+                        __LINE__, chan_list[i], freq);
+                }
+            }
+
+            pthread_mutex_lock(&interface->scan_state_mutex);
+            interface->scan_state = WIFI_SCAN_STATE_STARTED;
+            pthread_mutex_unlock(&interface->scan_state_mutex);
         }
-
-        if (RETURN_OK != set_freqs_filter(interface, 1, &freq))
-            return WIFI_HAL_ERROR;
-
-        wifi_hal_stats_info_print(
-            "%s:%d: [SCAN] Requested ONCHAN scan for the current channel %u, freq %u\n", __func__,
-            __LINE__, on_chan, freq);
-
-        pthread_mutex_lock(&interface->scan_state_mutex);
-        interface->scan_state = WIFI_SCAN_STATE_STARTED;
-        pthread_mutex_unlock(&interface->scan_state_mutex);
-
         // - scan_state is changed by nl80211_get_scan_results()
         if (nl80211_get_scan_results(interface) != RETURN_OK)
             return WIFI_HAL_ERROR;
@@ -3054,29 +3143,79 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         return WIFI_HAL_SUCCESS;
     }
 
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] oper_param.opclass:%d, oper_param.channel:%d\n", __func__,
-        __LINE__, radio->oper_param.operatingClass, radio->oper_param.channel);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] oper_param.opclass:%d, oper_param.channel:%d\n",
+        __func__, __LINE__, radio->oper_param.operatingClass, radio->oper_param.channel);
     switch (scan_mode) {
     case WIFI_RADIO_SCAN_MODE_ONCHAN: {
-        // - get the current channel
-        on_chan = radio->oper_param.channel;
-        if (on_chan == 0) {
-            wifi_hal_stats_error_print("%s:%d: [SCAN] Channel is 0, failure!\n", __func__, __LINE__);
-            return WIFI_HAL_ERROR;
+        if (chan_num == 0 || chan_list == NULL) {
+            chan_num = 1;
+            current_channel = radio->oper_param.channel;
         }
 
-        if (RETURN_OK != wifi_channel_to_freq(country, op_class, on_chan, &freq)) {
-            wifi_hal_stats_error_print("%s:%d: [SCAN] Failed to get frequency for channel %u\n", __func__,
-                __LINE__, on_chan);
+        // - allocate space for freq list
+        if (RETURN_OK != set_freqs_filter(interface, chan_num, NULL))
             return WIFI_HAL_ERROR;
+
+        // - convert channels to freqs
+        for (i = 0; i < chan_num; i++) {
+            if (is_ap_mode) {
+                // - verify the channel number (it is possible only in AP mode)
+                int i_freq;
+#if OPTION_GET_CHANNELS_FROM_HOSTAP == 0
+                if (current_channel != 0) {
+                    i_freq = channel_is_valid_from_radio(radio, current_channel);
+                } else {
+                    i_freq = channel_is_valid_from_radio(radio, chan_list[i]);
+                }
+#else
+                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+                if (current_channel != 0) {
+                    i_freq = channel_is_valid_from_hapd(&interface->u.ap.hapd, current_channel);
+                } else {
+                    i_freq = channel_is_valid_from_hapd(&interface->u.ap.hapd, chan_list[i]);
+                }
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif // OPTION_GET_CHANNELS_FROM_HOSTAP
+                if (i_freq < 0) {
+                    if (current_channel != 0) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] channel %u is invalid for radio %d\n", __func__,
+                            __LINE__, current_channel, radioIndex);
+                    } else {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] channel %u is invalid for radio %d\n", __func__,
+                            __LINE__, chan_list[i], radioIndex);
+                    }
+                    return WIFI_HAL_ERROR;
+                }
+                freq = i_freq;
+            } else {
+                if (current_channel != 0) {
+                    if (RETURN_OK !=
+                        wifi_channel_to_freq(country, op_class, current_channel, &freq)) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] Couldn't get frequency for channel %u\n", __func__,
+                            __LINE__, current_channel);
+                    }
+                } else {
+                    if (RETURN_OK != wifi_channel_to_freq(country, op_class, chan_list[i], &freq)) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] Couldn't get frequency for channel %u\n", __func__,
+                            __LINE__, chan_list[i]);
+                        return WIFI_HAL_ERROR;
+                    }
+                }
+            }
+
+            interface->scan_filter.values[i] = freq;
+            if (current_channel != 0) {
+                wifi_hal_stats_dbg_print("%s:%d: [SCAN] chan:%u -> freq:%u (current channel)\n",
+                    __func__, __LINE__, current_channel, freq);
+            } else {
+                wifi_hal_stats_dbg_print("%s:%d: [SCAN] chan:%u -> freq:%u\n", __func__, __LINE__,
+                    chan_list[i], freq);
+            }
         }
-
-        if (RETURN_OK != set_freqs_filter(interface, 1, &freq))
-            return WIFI_HAL_ERROR;
-
-        wifi_hal_stats_dbg_print(
-            "%s:%d: [SCAN] Requested ONCHAN scan for the current channel %u, freq %u\n", __func__,
-            __LINE__, on_chan, freq);
         break;
     }
 
@@ -3111,8 +3250,9 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
                 freq = i_freq;
             } else {
                 if (RETURN_OK != wifi_channel_to_freq(country, op_class, chan_list[i], &freq)) {
-                    wifi_hal_stats_error_print("%s:%d: [SCAN] Couldn't get frequency for channel %u\n",
-                        __func__, __LINE__, chan_list[i]);
+                    wifi_hal_stats_error_print(
+                        "%s:%d: [SCAN] Couldn't get frequency for channel %u\n", __func__, __LINE__,
+                        chan_list[i]);
                     return WIFI_HAL_ERROR;
                 }
             }
@@ -3126,8 +3266,8 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
 
     case WIFI_RADIO_SCAN_MODE_FULL: {
         if (!is_ap_mode) {
-            wifi_hal_stats_error_print("%s:%d: [SCAN] Full mode is not supported for STA interface\n",
-                __func__, __LINE__);
+            wifi_hal_stats_error_print(
+                "%s:%d: [SCAN] Full mode is not supported for STA interface\n", __func__, __LINE__);
             return WIFI_HAL_ERROR;
         }
 
@@ -3153,15 +3293,15 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         for (i = 0; i < interface->scan_filter.num; i++) {
             uint chan = 0;
             wifi_freq_to_channel(interface->scan_filter.values[i], &chan);
-            wifi_hal_stats_dbg_print("%s:%d: [SCAN] freq[%u]: %u (channel %u)\n", __func__, __LINE__, i,
-                interface->scan_filter.values[i], chan);
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] freq[%u]: %u (channel %u)\n", __func__,
+                __LINE__, i, interface->scan_filter.values[i], chan);
         }
         break;
     }
 
     case WIFI_RADIO_SCAN_MODE_SELECT_CHANNELS: {
 
-        if (!chan_num || !chan_list) {
+        if (chan_num != 0 || chan_list != NULL) {
             wifi_hal_error_print("%s:%d: [SCAN] Needs chan_num and chan_list param\n", __func__,
                 __LINE__);
             return WIFI_HAL_INVALID_ARGUMENTS;
@@ -3199,8 +3339,9 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
     }
 
     default:
-        wifi_hal_stats_error_print("%s:%d: [SCAN] scan mode %d is not supported! only supports: "
-                             "SCAN_MODE_ONCHAN(%d), SCAN_MODE_OFFCHAN(%d) and SCAN_MODE_FULL(%d)\n",
+        wifi_hal_stats_error_print(
+            "%s:%d: [SCAN] scan mode %d is not supported! only supports: "
+            "SCAN_MODE_ONCHAN(%d), SCAN_MODE_OFFCHAN(%d) and SCAN_MODE_FULL(%d)\n",
             __func__, __LINE__, scan_mode, WIFI_RADIO_SCAN_MODE_ONCHAN,
             WIFI_RADIO_SCAN_MODE_OFFCHAN, WIFI_RADIO_SCAN_MODE_FULL);
         return WIFI_HAL_ERROR;
@@ -3232,8 +3373,8 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         pthread_mutex_lock(&interface->scan_state_mutex);
         interface->scan_state = WIFI_SCAN_STATE_NONE;
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_stats_error_print("%s:%d: [SCAN] scan trigger failed for '%s'\n", __func__, __LINE__,
-            interface->name);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] scan trigger failed for '%s'\n", __func__,
+            __LINE__, interface->name);
         return WIFI_HAL_ERROR;
     }
 

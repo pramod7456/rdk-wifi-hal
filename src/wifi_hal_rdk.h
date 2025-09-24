@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -177,7 +177,7 @@ typedef struct _wifi_EapStats_t{    // Passpoint stats defined rdkb-1317
 #endif
 #define DPP_CONFPROTO 0x01 // denoting the DPP Configuration protocol
 
-#define STATUS_OK 0
+#define WIFI_STATUS_OK 0
 #define STATUS_NOT_COMPATIBLE 1
 #define STATUS_AUTH_FAILURE 2
 #define STATUS_DECRYPT_FAILURE 3
