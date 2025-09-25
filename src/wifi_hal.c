@@ -1289,8 +1289,11 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
         }
         memset(interface->wpa_s.conf->ssid, 0, sizeof(struct wpa_ssid));
     }
-
+#ifdef CONFIG_WIFI_EMULATOR
     interface->wpa_s.driver = &g_wpa_supplicant_driver_nl80211_ops;
+#else
+    interface->wpa_s.driver = &g_wpa_driver_nl80211_ops;
+#endif
     dl_list_init(&interface->wpa_s.bss);
     dl_list_init(&interface->wpa_s.bss_tmp_disallowed);
     wifi_hal_info_print("%s:%d: wpa supplicant params init success\n", __func__, __LINE__);
@@ -1699,7 +1702,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             }
         }
-#if  defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         //Init wpa-supplicant params.
         if (vap->vap_mode == wifi_vap_mode_sta) {
             deinit_wpa_supplicant(interface);

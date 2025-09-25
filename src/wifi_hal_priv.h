@@ -507,8 +507,8 @@ typedef struct wifi_interface_info_t {
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wifi_ie_info_t bss_elem_ie[MAX_NUM_RADIOS];
     wifi_ie_info_t beacon_elem_ie[MAX_NUM_RADIOS];
-    struct wpa_ssid current_ssid_info;
     struct wpa_supplicant wpa_s;
+    struct wpa_ssid current_ssid_info;
 #endif
     char mld_name[32];
 } wifi_interface_info_t;

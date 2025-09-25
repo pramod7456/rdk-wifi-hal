@@ -2912,7 +2912,6 @@ static void wpa_sm_eapol_eap_error_cb(void *ctx, int error_code)
 }
 
 #define MAX_STR_LEN 64
-#define MAX_CMD_LEN 128
 #define SUPPORTED_CIPHERS \
         "DEFAULT:@SECLEVEL=0"
 #define FACTORY_DEFAULT_FILE "/tmp/factory_nvram.data"
@@ -2932,7 +2931,6 @@ void get_details_from_file(char *input, char *output)
         wifi_hal_dbg_print("[%s %d] %s : %s\n", __func__, __LINE__, input,  output);
     }
 }
-#endif
 
 void get_details_from_file(const char *input, char *output)
 {
@@ -2975,25 +2973,25 @@ void get_details_from_file(const char *input, char *output)
     fclose(fp);
     fp = NULL;
 }
+#endif
 
 void update_eapol_sm_params(wifi_interface_info_t *interface)
 {
     struct eapol_ctx *ctx;
     wifi_vap_info_t *vap;
     wifi_vap_security_t *sec;
-    char *anonymous_identity;
-    char identity[MAX_STR_LEN] = {'\0'};
-    char password[MAX_STR_LEN] = {'\0'};
+/*    char identity[MAX_STR_LEN] = {'\0'};
+    char password[MAX_STR_LEN] = {'\0'};*/
     
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
-    anonymous_identity = "anonymous@xfignite.com";
 
+#if 0
     get_details_from_file("CM", identity);
     wifi_hal_dbg_print("[%s %d] CM-MAC/Identity updated as %s\n", __func__, __LINE__, identity);
     get_details_from_file("Serial", password);
     wifi_hal_dbg_print("[%s %d] Serial/Password updated as %s\n", __func__, __LINE__, password);
-
+#endif
     if (interface->u.sta.wpa_sm->eapol == NULL) {
         ctx = os_zalloc(sizeof(struct eapol_ctx));
         wifi_hal_info_print("%s:%d: wifi eapol context:%p created for vap_index:%d\n",
@@ -3109,6 +3107,10 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
             
 #else
+	    wifi_hal_dbg_print("%s:%d: Ignite-status : %d\n", __func__, __LINE__, vap->u.sta_info.ignite_enabled);
+            if (vap->u.sta_info.ignite_enabled == true) {
+	    char *anonymous_identity;
+            anonymous_identity = "anonymous@xfignite.com";
             if (vap->vap_mode == wifi_vap_mode_sta) {
                 wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
                 if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
@@ -3146,6 +3148,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
             interface->u.sta.wpa_eapol_config.anonymous_identity = (unsigned char*)anonymous_identity;
 	    interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(anonymous_identity);
+	    }
 #endif // CONFIG_WIFI_EMULATOR
             interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
             interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;

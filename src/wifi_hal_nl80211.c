@@ -66,8 +66,9 @@
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 #include "sme.h"
 #endif
+#ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
-#if defined(BANANA_PI_PORT)
+#elif defined(BANANA_PI_PORT)
 #include "wpa_supplicant/config.h"
 #endif
 
