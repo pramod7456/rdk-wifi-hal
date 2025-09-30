@@ -3095,10 +3095,6 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 		    wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
                     strncpy(interface->wpa_s.current_ssid->eap.phase2, "auth=PAP", MAX_STR_LEN - 1);
                     break;
-		case WIFI_EAP_PHASE2_MSCHAP:
-		    wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
-		    strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=MSCHAP", MAX_STR_LEN - 1);
-		    break;
                 default:
                     // using PAP as default value.
 		    wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
@@ -3144,6 +3140,10 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 case WIFI_EAP_PHASE2_PAP:
                     strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP", MAX_STR_LEN - 1);
                     break;
+		case WIFI_EAP_PHASE2_MSCHAP:
+		    wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
+		    strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=MSCHAP", MAX_STR_LEN - 1);
+		    break;
                 default:
                     // using PAP as default value.
                     wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
