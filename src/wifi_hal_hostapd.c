@@ -3034,7 +3034,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, ForceAuthorized);
         }
 #endif // CONFIG_WIFI_EMULATOR
-        wifi_hal_dbg_print("[%s %d] Mode : %d type : %d phase : %d\n", __func__,__LINE__, sec->mode, sec->u.radius.eap_type,sec->u.radius.phase2);
+        wifi_hal_dbg_print("[%s %d] Mode : %d type : %d phase : %d id : %s password : %s\n", __func__,__LINE__, sec->mode, sec->u.radius.eap_type,sec->u.radius.phase2, sec->u.radius.identity, sec->u.radius.key);
 	if (sec->mode == wifi_security_mode_wpa2_enterprise ||
             sec->mode == wifi_security_mode_wpa3_enterprise) {
             switch (sec->u.radius.eap_type) {
@@ -3047,6 +3047,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 eap_peer_md5_register();
                 break;
             case WIFI_EAP_TYPE_TLS:
+		wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
                 interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TLS;
                 eap_peer_tls_register();
                 break;
@@ -3059,6 +3060,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 eap_peer_peap_register();
                 break;
             case WIFI_EAP_TYPE_TTLS:
+		wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
                 interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TTLS;
                 eap_peer_ttls_register();
                 break;
@@ -3090,10 +3092,16 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 memset(interface->wpa_s.current_ssid->eap.phase2, 0, MAX_STR_LEN);
                 switch (sec->u.radius.phase2) {
                 case WIFI_EAP_PHASE2_PAP:
+		    wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
                     strncpy(interface->wpa_s.current_ssid->eap.phase2, "auth=PAP", MAX_STR_LEN - 1);
                     break;
+		case WIFI_EAP_PHASE2_MSCHAP:
+		    wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
+		    strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=MSCHAP", MAX_STR_LEN - 1);
+		    break;
                 default:
                     // using PAP as default value.
+		    wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
                     strncpy(interface->wpa_s.current_ssid->eap.phase2, "auth=PAP", MAX_STR_LEN - 1);
                     break;
                 }
