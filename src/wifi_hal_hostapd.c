@@ -3067,7 +3067,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             default:
                 wifi_hal_error_print("%s:%d: Unsupported EAP method :%d\n", __func__, __LINE__,
                     sec->u.radius.eap_type);
-                //return;
+                return;
             }
 #ifdef CONFIG_WIFI_EMULATOR
             if (vap->vap_mode == wifi_vap_mode_sta) {
