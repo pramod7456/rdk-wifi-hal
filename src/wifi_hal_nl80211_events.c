@@ -761,9 +761,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     if (interface->u.sta.pending_rx_eapol) {
         void *hdr;
         int buff_len;
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
 #ifdef EAPOL_OVER_NL
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
         hdr = interface->u.sta.rx_eapol_buff;
         buff_len = interface->u.sta.buff_len;
 #else

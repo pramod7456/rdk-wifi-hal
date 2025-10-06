@@ -2685,7 +2685,6 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     sm = interface->u.sta.wpa_sm;
 
     memcpy(sm->bssid, backhaul->bssid, sizeof(mac_address_t));
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
 
     pbkdf2_sha1(sec->u.key.key, backhaul->ssid, strlen(backhaul->ssid), 
         4096, pmk, PMK_LEN);
@@ -2743,7 +2742,6 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, key_mgmt);
         }
 
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
         wifi_hal_dbg_print("%s:%d:%x %x %x\n", __func__, __LINE__, data.group_cipher,
             data.pairwise_cipher, key_mgmt);
     } else {
@@ -2785,14 +2783,12 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 return;
             }
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, key_mgmt);
-            wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
         }
     }
 
     if (get_ie_by_eid(WLAN_EID_RSN, assoc_req, interface->u.sta.assoc_req_len, &ie, &ie_len)
                 == true) {
         wpa_sm_set_assoc_wpa_ie(sm, ie, ie_len);
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
     } else {
         ie = os_malloc(max_wpa_ie_len);
         if (ie) {
@@ -2822,7 +2818,6 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     }
 #endif
     wpa_sm_notify_assoc(sm, sm->bssid);
-    wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
 }
 
 static void wpa_sm_eapol_notify_done(void *ctx)
@@ -2914,90 +2909,20 @@ static void wpa_sm_eapol_eap_error_cb(void *ctx, int error_code)
 #define MAX_STR_LEN 64
 #define SUPPORTED_CIPHERS \
         "DEFAULT:@SECLEVEL=0"
-#define FACTORY_DEFAULT_FILE "/tmp/factory_nvram.data"
-
-#if 0
-void get_details_from_file(char *input, char *output)
-{
-    FILE *fp = NULL;
-    char cmd[MAX_CMD_LEN] = {'\0'};
-    snprintf(cmd, MAX_CMD_LEN, "grep \"%s\" \"%s\" | cut -d ' ' -f2", input, FACTORY_DEFAULT_FILE);
-    wifi_hal_dbg_print("[%s %d] cmd : %s\n", __func__, __LINE__, cmd);
-    fp = popen(cmd,"r");
-    if (fp != NULL) {
-        while (fgets(output, MAX_STR_LEN, fp) != NULL){
-            output[strlen(output) - 1] = '\0';
-        }
-        wifi_hal_dbg_print("[%s %d] %s : %s\n", __func__, __LINE__, input,  output);
-    }
-}
-
-void get_details_from_file(const char *input, char *output)
-{
-    FILE *fp = NULL;
-    char line[MAX_STR_LEN] = {0};
-
-    if (!input) {
-        wifi_hal_error_print("[%s %d] Input NULL\n", __func__, __LINE__);
-	return;
-    }
-
-    fp = fopen(FACTORY_DEFAULT_FILE, "r");
-    if (fp == NULL) {
-        wifi_hal_dbg_print("[%s %d] Failed to open %s\n",
-                           __func__, __LINE__, FACTORY_DEFAULT_FILE);
-        return;
-    }
-
-    while (fgets(line, sizeof(line), fp) != NULL) {
-        char key[MAX_STR_LEN] = {0};
-        char value[MAX_STR_LEN] = {0};
-
-        // remove trailing newline
-        line[strcspn(line, "\n")] = 0;
-
-	wifi_hal_dbg_print("[%s %d] line : %s\n", __func__, __LINE__, line);
-        // split into "key value"
-        if (sscanf(line, "%s %s", key, value) == 2) {
-	    wifi_hal_dbg_print("[%s %d] key : %s value : %s\n", __func__, __LINE__, key, value);
-            if (strcmp(key, input) == 0) {
-                strncpy(output, value, MAX_STR_LEN - 1);
-                output[MAX_STR_LEN - 1] = '\0';
-                wifi_hal_dbg_print("[%s %d] %s : %s\n",
-                                   __func__, __LINE__, key, output);
-                break;
-            }
-        }
-    }
-
-    fclose(fp);
-    fp = NULL;
-}
-#endif
 
 void update_eapol_sm_params(wifi_interface_info_t *interface)
 {
     struct eapol_ctx *ctx;
     wifi_vap_info_t *vap;
     wifi_vap_security_t *sec;
-/*    char identity[MAX_STR_LEN] = {'\0'};
-    char password[MAX_STR_LEN] = {'\0'};*/
-    
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
 
-#if 0
-    get_details_from_file("CM", identity);
-    wifi_hal_dbg_print("[%s %d] CM-MAC/Identity updated as %s\n", __func__, __LINE__, identity);
-    get_details_from_file("Serial", password);
-    wifi_hal_dbg_print("[%s %d] Serial/Password updated as %s\n", __func__, __LINE__, password);
-#endif
     if (interface->u.sta.wpa_sm->eapol == NULL) {
         ctx = os_zalloc(sizeof(struct eapol_ctx));
-        wifi_hal_info_print("%s:%d: wifi eapol context:%p created for vap_index:%d\n",
-            __func__, __LINE__, ctx, vap->vap_index);
+        wifi_hal_info_print("%s:%d: wifi eapol context:%p created for vap_index:%d\n", __func__,
+            __LINE__, ctx, vap->vap_index);
 
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
         ctx->ctx = interface;
         ctx->msg_ctx = interface;
         ctx->eapol_send_ctx = interface;
@@ -3011,7 +2936,6 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
         ctx->eap_error_cb = wpa_sm_eapol_eap_error_cb;
         ctx->cb_ctx = interface;
 
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
         interface->u.sta.wpa_sm->eapol = eapol_sm_init(ctx);
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         interface->wpa_s.wpa->eapol = interface->u.sta.wpa_sm->eapol;
@@ -3020,22 +2944,23 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
         eapol_sm_notify_eap_success(interface->u.sta.wpa_sm->eapol, 0);
         eapol_sm_notify_eap_fail(interface->u.sta.wpa_sm->eapol, 0);
 #ifndef CONFIG_WIFI_EMULATOR
-        wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
-       /* Ensure the state machine is set to DISCONNECTED to prevent DHCP RX packets from being
+        /* Ensure the state machine is set to DISCONNECTED to prevent DHCP RX packets from being
          * dropped */
         eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
 #else
         if ((sec->mode == wifi_security_mode_wpa2_enterprise) ||
             (sec->mode == wifi_security_mode_wpa3_enterprise)) {
-			wifi_hal_dbg_print("In %s:%d\n",__func__,__LINE__);
+            wifi_hal_dbg_print("In %s:%d\n", __func__, __LINE__);
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
         } else {
-			wifi_hal_dbg_print("In %s:%d\n",__func__,__LINE__);
+            wifi_hal_dbg_print("In %s:%d\n", __func__, __LINE__);
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, ForceAuthorized);
         }
 #endif // CONFIG_WIFI_EMULATOR
-        wifi_hal_dbg_print("[%s %d] Mode : %d type : %d phase : %d id : %s password : %s\n", __func__,__LINE__, sec->mode, sec->u.radius.eap_type,sec->u.radius.phase2, sec->u.radius.identity, sec->u.radius.key);
-	if (sec->mode == wifi_security_mode_wpa2_enterprise ||
+        wifi_hal_dbg_print("[%s %d] Mode : %d type : %d phase : %d id : %s password : %s\n",
+            __func__, __LINE__, sec->mode, sec->u.radius.eap_type, sec->u.radius.phase2,
+            sec->u.radius.identity, sec->u.radius.key);
+        if (sec->mode == wifi_security_mode_wpa2_enterprise ||
             sec->mode == wifi_security_mode_wpa3_enterprise) {
             switch (sec->u.radius.eap_type) {
             case WIFI_EAP_TYPE_PWD:
@@ -3047,7 +2972,6 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 eap_peer_md5_register();
                 break;
             case WIFI_EAP_TYPE_TLS:
-		wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
                 interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TLS;
                 eap_peer_tls_register();
                 break;
@@ -3060,7 +2984,6 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 eap_peer_peap_register();
                 break;
             case WIFI_EAP_TYPE_TTLS:
-		wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
                 interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TTLS;
                 eap_peer_ttls_register();
                 break;
@@ -3092,12 +3015,10 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 memset(interface->wpa_s.current_ssid->eap.phase2, 0, MAX_STR_LEN);
                 switch (sec->u.radius.phase2) {
                 case WIFI_EAP_PHASE2_PAP:
-		    wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
                     strncpy(interface->wpa_s.current_ssid->eap.phase2, "auth=PAP", MAX_STR_LEN - 1);
                     break;
                 default:
                     // using PAP as default value.
-		    wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
                     strncpy(interface->wpa_s.current_ssid->eap.phase2, "auth=PAP", MAX_STR_LEN - 1);
                     break;
                 }
@@ -3109,54 +3030,56 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             interface->wpa_s.current_ssid->eap.password_len = strlen(sec->u.radius.key);
             interface->wpa_s.current_ssid->eap.eap_methods = &interface->u.sta.wpa_eapol_method;
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
-            
+
 #else
-	    wifi_hal_dbg_print("%s:%d: Ignite-status : %d\n", __func__, __LINE__, vap->u.sta_info.ignite_enabled);
+            wifi_hal_dbg_print("%s:%d: Ignite-status : %d\n", __func__, __LINE__,
+                vap->u.sta_info.ignite_enabled);
             if (vap->u.sta_info.ignite_enabled == true) {
-	    char *anonymous_identity;
-            anonymous_identity = "anonymous@xfignite.com";
-            if (vap->vap_mode == wifi_vap_mode_sta) {
-                wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
-                if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
-                    interface->u.sta.wpa_eapol_config.openssl_ciphers = (char *)malloc(MAX_STR_LEN);
+                char *anonymous_identity;
+                anonymous_identity = "anonymous@xfignite.com";
+                if (vap->vap_mode == wifi_vap_mode_sta) {
                     if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
-                        wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
-                        return;
+                        interface->u.sta.wpa_eapol_config.openssl_ciphers = (char *)malloc(
+                            MAX_STR_LEN);
+                        if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
+                            wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
+                            return;
+                        }
                     }
-                }
-                memset(interface->u.sta.wpa_eapol_config.openssl_ciphers, 0, MAX_STR_LEN);
-                strncpy(interface->u.sta.wpa_eapol_config.openssl_ciphers, SUPPORTED_CIPHERS,
+                    memset(interface->u.sta.wpa_eapol_config.openssl_ciphers, 0, MAX_STR_LEN);
+                    strncpy(interface->u.sta.wpa_eapol_config.openssl_ciphers, SUPPORTED_CIPHERS,
                         MAX_STR_LEN - 1);
-                if (interface->u.sta.wpa_eapol_config.phase2 == NULL) {
-                    interface->u.sta.wpa_eapol_config.phase2 = (char *)malloc(MAX_STR_LEN);
                     if (interface->u.sta.wpa_eapol_config.phase2 == NULL) {
-                        wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
-                        return;
+                        interface->u.sta.wpa_eapol_config.phase2 = (char *)malloc(MAX_STR_LEN);
+                        if (interface->u.sta.wpa_eapol_config.phase2 == NULL) {
+                            wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
+                            return;
+                        }
+                    }
+                    memset(interface->u.sta.wpa_eapol_config.phase2, 0, MAX_STR_LEN);
+                    switch (sec->u.radius.phase2) {
+                    case WIFI_EAP_PHASE2_PAP:
+                        strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP",
+                            MAX_STR_LEN - 1);
+                        break;
+                    case WIFI_EAP_PHASE2_MSCHAP:
+                        strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=MSCHAP",
+                            MAX_STR_LEN - 1);
+                        break;
+                    default:
+                        // using PAP as default value.
+                        strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP",
+                            MAX_STR_LEN - 1);
+                        break;
                     }
                 }
-		memset(interface->u.sta.wpa_eapol_config.phase2, 0, MAX_STR_LEN);
-	        wifi_hal_dbg_print("%s:%d: phase2 : %d\n", __func__, __LINE__, sec->u.radius.phase2);
-                switch (sec->u.radius.phase2) {
-                case WIFI_EAP_PHASE2_PAP:
-                    strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP", MAX_STR_LEN - 1);
-                    break;
-		case WIFI_EAP_PHASE2_MSCHAP:
-		    wifi_hal_error_print("%s:%d\n", __func__, __LINE__);
-		    strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=MSCHAP", MAX_STR_LEN - 1);
-		    break;
-                default:
-                    // using PAP as default value.
-                    wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
-                    strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP", MAX_STR_LEN - 1);
-		    break;
-                }
+                interface->u.sta.wpa_eapol_config.fragment_size = 400;
+                eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
+                interface->u.sta.wpa_eapol_config.anonymous_identity =
+                    (unsigned char *)anonymous_identity;
+                interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(
+                    anonymous_identity);
             }
-            interface->u.sta.wpa_eapol_config.fragment_size = 400;
-      	    wifi_hal_dbg_print("%s:%d:Pramod\n", __func__, __LINE__);
-            eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
-            interface->u.sta.wpa_eapol_config.anonymous_identity = (unsigned char*)anonymous_identity;
-	    interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(anonymous_identity);
-	    }
 #endif // CONFIG_WIFI_EMULATOR
             interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
             interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
@@ -3166,12 +3089,12 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
 
             interface->u.sta.wpa_eapol_config.eap_methods = &interface->u.sta.wpa_eapol_method;
-            eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol, &interface->u.sta.wpa_eapol_config, NULL);	
-	} 
+            eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol,
+                &interface->u.sta.wpa_eapol_config, NULL);
+        }
     }
-} 
-	    
-	   
+}
+
 static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
 {
     int ret;

@@ -2337,7 +2337,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     ssid_t  ssid_list[8];
     int op_class, freq_num = 0;
 
-    wifi_hal_dbg_print("%s:%d: index: %d mode: %d dwell time: %d\n", __func__, __LINE__, index,
+    wifi_hal_stats_dbg_print("%s:%d: index: %d mode: %d dwell time: %d\n", __func__, __LINE__, index,
         scan_mode, dwell_time);
 
     RADIO_INDEX_ASSERT(index);
@@ -2366,7 +2366,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 
     if (found == false) {
-        wifi_hal_error_print("%s:%d:Could not find sta interface on radio index: %d, start scan failure\n", 
+        wifi_hal_stats_error_print("%s:%d:Could not find sta interface on radio index: %d, start scan failure\n", 
             __func__, __LINE__, index);
         return RETURN_ERR;
     }
@@ -2423,7 +2423,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 
     strcpy(ssid_list[0], vap->u.sta_info.ssid);
-    wifi_hal_dbg_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
+    wifi_hal_stats_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
 
     pthread_mutex_lock(&interface->scan_info_mutex);
     hash_map_cleanup(interface->scan_info_map);
@@ -4653,10 +4653,9 @@ int wifi_hal_setApMacAddressControlMode(uint32_t apIndex, uint32_t mac_filter_mo
 
 int wifi_hal_add_station_bridge( char *interface_name,char *bridge_name)
 {
-    wifi_hal_error_print("Enter %s:%d\n",__func__,__LINE__);
    nl80211_remove_from_bridge(interface_name);
     if (nl80211_create_bridge(interface_name, bridge_name) != 0) {
-        wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
+        wifi_hal_error_print("%s:%d: Interface:%s failed to create bridge:%s\n",
             __func__, __LINE__, interface_name, bridge_name);
         return RETURN_ERR;
     }
