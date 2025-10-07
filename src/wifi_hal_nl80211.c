@@ -9164,6 +9164,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             os_strlen(interface->wpa_s.current_ssid->sae_password),
             interface->wpa_s.current_ssid->sae_password_id);
     }
+
 #ifdef CONFIG_WIFI_EMULATOR
     interface->wpa_s.driver = &g_wpa_supplicant_driver_nl80211_ops;
 #else
@@ -9537,6 +9538,7 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
             goto failure;
         }
     }
+
     ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
     if (ret) {
         wifi_hal_stats_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));

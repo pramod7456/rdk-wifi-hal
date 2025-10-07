@@ -36,6 +36,7 @@
 #include "hostapd/eap_register.h"
 #include "ap/rrm.h"
 #include "ap/neighbor_db.h"
+
 #ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
 #endif
@@ -1126,6 +1127,7 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
         *backhaul = *best;
         pthread_mutex_unlock(&interface->scan_info_mutex);
     }
+
     if (nl80211_connect_sta(interface) != 0) {
         return RETURN_ERR;
     }
@@ -1226,7 +1228,7 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
     return RETURN_OK;
 }
 
-#if  defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface)
 {
     return &interface->current_ssid_info;
@@ -4641,7 +4643,7 @@ int wifi_hal_setApMacAddressControlMode(uint32_t apIndex, uint32_t mac_filter_mo
 
 int wifi_hal_add_station_bridge( char *interface_name,char *bridge_name)
 {
-   nl80211_remove_from_bridge(interface_name);
+    nl80211_remove_from_bridge(interface_name);
     if (nl80211_create_bridge(interface_name, bridge_name) != 0) {
         wifi_hal_error_print("%s:%d: Interface:%s failed to create bridge:%s\n",
             __func__, __LINE__, interface_name, bridge_name);
