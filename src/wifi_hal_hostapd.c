@@ -197,7 +197,8 @@ void init_hostap_bss(wifi_interface_info_t *interface)
     /* use key0 in individual key and key1 in broadcast key */
     conf->broadcast_key_idx_min = 1;
     conf->broadcast_key_idx_max = 2;
-    conf->eap_reauth_period = 3600;
+    conf->eap_reauth_period = 600;
+    wifi_hal_dbg_print("%s:%d: SREESH reauth period updated as %d\n", __func__, __LINE__, conf->eap_reauth_period);
 
     conf->wpa_group_rekey = 0;
     conf->wpa_gmk_rekey = 0;
@@ -2577,10 +2578,17 @@ static int wpa_sm_sta_add_pmkid(void *_wpa_s, void *network_ctx,
                                             const u8 *pmk, size_t pmk_len)
 #endif
 {
-    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: SREESH Enter\n", __func__, __LINE__);
     return 0;
 }
 
+static int wpa_sm_sta_remove_pmkid(void *_wpa_s, void *network_ctx,
+                                            const u8 *bssid, const u8 *pmkid,
+                                            const u8 *fils_cache_id)
+{
+    wifi_hal_dbg_print("%s:%d: SREESH Enter\n", __func__, __LINE__);
+    return 0;
+}
 void update_wpa_sm_params(wifi_interface_info_t *interface)
 {
     wifi_vap_info_t *vap;
@@ -2639,7 +2647,9 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         ctx->mlme_setprotection = wpa_sm_sta_mlme_setprotection;
         ctx->key_mgmt_set_pmk = wpa_sm_sta_key_mgmt_set_pmk;
         ctx->add_pmkid = wpa_sm_sta_add_pmkid;
-
+        ctx->remove_pmkid = wpa_sm_sta_remove_pmkid;
+        wifi_hal_info_print("%s:%d: SREESH wifi wpa_sm context:%p created for vap_index:%d\n",
+            __func__, __LINE__, ctx, vap->vap_index);
         interface->u.sta.wpa_sm = wpa_sm_init(ctx);
     }
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)

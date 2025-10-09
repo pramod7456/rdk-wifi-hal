@@ -15224,36 +15224,36 @@ int wifi_drv_set_operstate(void *priv, int state)
     interface = (wifi_interface_info_t *)priv;
     vap = &interface->vap_info;
 
-    wifi_hal_info_print("%s:%d: Enter, interface:%s bridge:%s driver operation state:%d\n",
+    wifi_hal_info_print("%s:%d: SREESH Enter, interface:%s bridge:%s driver operation state:%d\n",
             __func__, __LINE__, interface->name, vap->bridge_name, state);
 
 #ifndef CONFIG_WIFI_EMULATOR
     if (interface->vap_configured == true) {
         if (state == 1) {
-            wifi_hal_dbg_print("%s:%d: VAP already configured\n", __func__, __LINE__);
+            wifi_hal_info_print("%s:%d: SREESH VAP already configured\n", __func__, __LINE__);
             return 0;
         }
         else {
-            wifi_hal_dbg_print("%s:%d: Configured VAP is being disabled\n", __func__, __LINE__);
+            wifi_hal_info_print("%s:%d: SREESH Configured VAP is being disabled\n", __func__, __LINE__);
             return 0;
         }
     } else {
         if (state == 0) {
-            wifi_hal_dbg_print("%s:%d: VAP is not configured\n", __func__, __LINE__);
+            wifi_hal_info_print("%s:%d: SREESH VAP is not configured\n", __func__, __LINE__);
             return 0;
         }
     }
 #endif
 
     if (vap->u.bss_info.enabled == false && vap->u.sta_info.enabled == false) {
-        wifi_hal_dbg_print("%s:%d: VAP not enabled\n", __func__, __LINE__);
+        wifi_hal_info_print("%s:%d: SREESH VAP not enabled\n", __func__, __LINE__);
         return 0;
     }
 
     if (vap->vap_mode != wifi_vap_mode_monitor) {
         // Both STAs and APs can register for management frames but not spurious frames
         if (nl80211_register_mgmt_frames(interface) != 0) {
-            wifi_hal_error_print("%s:%d: Failed to register for management frames\n", __func__, __LINE__);
+            wifi_hal_error_print("%s:%d: SREESH Failed to register for management frames\n", __func__, __LINE__);
             return -1;
         }
     }
@@ -15271,6 +15271,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     }
 #ifndef EAPOL_OVER_NL
 #ifndef CONFIG_WIFI_EMULATOR
+    wifi_hal_info_print("%s:%d: SREESH Creating raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
     if (vap->vap_mode == wifi_vap_mode_ap) {
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
         if (sock_fd < 0) {
@@ -15278,6 +15279,7 @@ int wifi_drv_set_operstate(void *priv, int state)
             return -1;
         }
     } else {
+        wifi_hal_info_print("%s:%d: SREESH Creating raw socket on bridge for STA: %s\n", __func__, __LINE__, vap->bridge_name);
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
@@ -15285,24 +15287,32 @@ int wifi_drv_set_operstate(void *priv, int state)
         }
     }
 #else
+    wifi_hal_info_print("%s:%d: SREESH Creating raw socket on bridge for STA inside else: %s\n", __func__, __LINE__, vap->bridge_name);
     if ((interface->vap_configured == true)  && (vap->vap_mode == wifi_vap_mode_sta)) {
+        wifi_hal_info_print("%s:%d: SREESH Inside the if condition", __func__, __LINE__);
 	 if (interface->u.sta.sta_sock_fd != 0) {
              close(interface->u.sta.sta_sock_fd);
              interface->u.sta.sta_sock_fd = 0;
          }
     }
+    wifi_hal_info_print("%s:%d: SREESH Creating raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
     sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock_fd < 0) {
-        wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
+        wifi_hal_error_print("%s:%d: SREESH Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
         return -1;
     }
 #endif
 
+#if 0
 #ifdef CONFIG_WIFI_EMULATOR
     ifname = vap->bridge_name;
 #else
     ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
 #endif
+#endif
+    wifi_hal_info_print("%s:%d SREESH br-name : %s\n", __func__, __LINE__, vap->bridge_name);
+    ifname = vap->bridge_name;
+    wifi_hal_info_print("%s:%d SREESH br-name : %s if-name : %s\n", __func__, __LINE__, vap->bridge_name, ifname);
     memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
     sockaddr.sll_family   = AF_PACKET;
     sockaddr.sll_ifindex  = if_nametoindex(ifname);
