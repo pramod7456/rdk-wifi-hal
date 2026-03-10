@@ -452,10 +452,13 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         switch(event.tx_status.stype) {
          case WLAN_FC_STYPE_AUTH:
             mgmt_type = WIFI_MGMT_FRAME_TYPE_AUTH_RSP;
+            wifi_hal_dbg_print("%s:%d: Pramod Received auth response frame from: %s\n", __func__, __LINE__,
+                           to_mac_str(sta, sta_mac_str));
 
             for (int i = 0; i < callbacks->num_statuscode_cbs; i++) {
                 if (callbacks->statuscode_cb[i] != NULL) {
                     status = le_to_host16(mgmt->u.auth.status_code);
+            wifi_hal_dbg_print("%s:%d: Pramod Received auth response frame from: %d\n", __func__, __LINE__, status);
                     callbacks->statuscode_cb[i](vap->vap_index, to_mac_str(hdr->addr2, sta_mac_str), to_mac_str(hdr->addr1, frame_da_str), mgmt_type, status);
                 }
             }
