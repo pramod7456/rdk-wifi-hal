@@ -714,18 +714,27 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 
         case wifi_encryption_aes:
             conf->wpa_pairwise = WPA_CIPHER_CCMP;
+            break;
+
 #ifdef CONFIG_IEEE80211BE
+        case wifi_encryption_aes_gcmp256:
+            conf->wpa_pairwise = WPA_CIPHER_CCMP;
             switch (sec->mode) {
             case wifi_security_mode_wpa3_personal:
             case wifi_security_mode_wpa3_transition:
             case wifi_security_mode_wpa3_enterprise:
+            case wifi_security_mode_enhanced_open:
                 conf->wpa_pairwise |= (conf->disable_11be ? 0 : WPA_CIPHER_GCMP_256);
+                break;
+            case wifi_security_mode_wpa3_compatibility:
+                /* GCMP-256 is advertised via rsn_pairwise_rsno_2 in RSNO2 IE only;
+                 * must not appear in the main RSN IE pairwise list */
                 break;
             default:
                 break;
             }
-#endif /* CONFIG_IEEE80211BE */
             break;
+#endif /* CONFIG_IEEE80211BE */
 
         case wifi_encryption_aes_tkip:
             conf->wpa_pairwise = wpa_parse_cipher("TKIP CCMP");
@@ -2268,6 +2277,7 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
     }
 #endif /* CONFIG_GENERIC_MLO */
 
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     // initialize the default params
     if (update_hostap_data(interface) != RETURN_OK) {
         goto exit;
@@ -2298,6 +2308,7 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
 
     ret = RETURN_OK;
 exit:
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return ret;
 }
 
@@ -2901,6 +2912,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         get_vap_security_mode(vap, sec) == wifi_security_mode_wpa3_enterprise ||
         get_vap_security_mode(vap, sec) == wifi_security_mode_wpa3_transition) {
         wpa_sm_set_param(sm, WPA_PARAM_MFP, MGMT_FRAME_PROTECTION_REQUIRED);
+        wpa_sm_set_param(sm, WPA_PARAM_MGMT_GROUP, WPA_CIPHER_AES_128_CMAC);
     }
 #endif
 
@@ -3296,6 +3308,8 @@ int start_bss(wifi_interface_info_t *interface)
     //struct hostapd_config *iconf;
     wifi_vap_info_t *vap = &interface->vap_info;
 
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+
     hapd = &interface->u.ap.hapd;
     conf = hapd->conf;
     //iconf = hapd->iconf;
@@ -3324,6 +3338,8 @@ int start_bss(wifi_interface_info_t *interface)
 #endif
 #endif
 #endif /* CONFIG_GENERIC_MLO */
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
     return ret;
 }
 

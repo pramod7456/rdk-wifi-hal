@@ -2542,37 +2542,14 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
         break;
 
     case wifi_encryption_aes:
-#ifdef CONFIG_IEEE80211BE
-        {
-            const wifi_interface_info_t * const interface = get_interface_by_vap_index(vap_index);
-            if (NULL == interface) {
-                wifi_hal_error_print("%s:%d NULL pointer!\n", __FUNCTION__, __LINE__);
-                return RETURN_ERR;
-            }
-            unsigned char has_gcmp256 = 0;
-            if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
-                const wifi_security_modes_t security_mode = interface->vap_info.u.bss_info.security.mode;
-                switch (security_mode) {
-                case wifi_security_mode_wpa3_personal:
-                case wifi_security_mode_wpa3_transition:
-                case wifi_security_mode_wpa3_enterprise:
-                case wifi_security_mode_wpa3_compatibility:
-                    has_gcmp256 = !interface->u.ap.conf.disable_11be;
-                    break;
-                default:
-                    break;
-                }
-            }
-            if (has_gcmp256) {
-                strcpy(encryption_mode_str, "aes+gcmp256");
-            } else {
-                strcpy(encryption_mode_str, "aes");
-            }
-        }
-#else
         strcpy(encryption_mode_str, "aes");
-#endif /* CONFIG_IEEE80211BE */
         break;
+
+#ifdef CONFIG_IEEE80211BE
+    case wifi_encryption_aes_gcmp256:
+        strcpy(encryption_mode_str, "aes+gcmp256");
+        break;
+#endif /* CONFIG_IEEE80211BE */
 
     case wifi_encryption_aes_tkip:
         strcpy(encryption_mode_str, "tkip+aes");
@@ -2950,6 +2927,114 @@ int pick_akm_suite(int sel)
         return -1;
     }
 }
+
+int get_dwell_time(void)
+{
+    FILE *fp = NULL;
+    int dwell_time = DEFAULT_DWELL_TIME_MS;
+
+    fp = fopen(DWELL_TIME_PATH, "r");
+    if (fp == NULL) {
+        return dwell_time;
+    }
+    fscanf(fp, "%d", &dwell_time);
+    fclose(fp);
+    return dwell_time;
+}
+
+#ifndef FEATURE_SINGLE_PHY
+uint32_t rnr_crc32(const uint8_t *p, size_t n)
+{
+    uint32_t c = 0xFFFFFFFFu;
+    size_t i, b;
+
+    for (i = 0; i < n; i++) {
+        c ^= p[i];
+        for (b = 0; b < 8; b++)
+            c = (c >> 1) ^ ((c & 1u) ? 0xEDB88320u : 0u);
+    }
+    return c ^ 0xFFFFFFFFu;
+}
+
+bool rnr_is_6ghz_opclass(uint8_t oc)
+{
+    switch (oc) {
+    case 131:
+    case 132:
+    case 133:
+    case 134:
+    case 135:
+    case 136:
+    case 137:
+        return true;
+    default:
+        return false;
+    }
+}
+bool rnr_freq_add(rnr_scan_t *rnr, uint32_t f)
+{
+    unsigned int i;
+
+    if (rnr == NULL || rnr->nfreq >= RNR_FREQ_CAP)
+        return false;
+
+    for (i = 0; i < rnr->nfreq; i++) {
+        if (rnr->freq[i] == f)
+            return false;
+    }
+    rnr->freq[rnr->nfreq++] = f;
+    return true;
+}
+
+unsigned int rnr_ssid_offset(uint8_t ilen)
+{
+    switch (ilen) {
+    case 5:
+    case 6:
+        return 1;
+    case 11:
+    case 12:
+    case 13:
+    case 16:
+        return 7;
+    default:
+        return 0;
+    }
+}
+
+bool rnr_tbtt_match(const uint8_t *set, uint8_t cnt, uint8_t ilen, unsigned int ssid_off,
+    uint32_t crc)
+{
+    uint8_t i;
+
+    for (i = 0; i < cnt; i++) {
+        uint32_t ss;
+        memcpy(&ss, set + (size_t)i * ilen + ssid_off, sizeof(ss));
+        if (ss == crc)
+            return true;
+    }
+    return false;
+}
+
+wifi_interface_info_t *rnr_sta6(void)
+{
+    unsigned int r;
+    wifi_interface_info_t *ifc;
+
+    for (r = 0; r < g_wifi_hal.num_radios; r++) {
+        if (g_wifi_hal.radio_info[r].oper_param.band != WIFI_FREQUENCY_6_BAND)
+            continue;
+        ifc = hash_map_get_first(g_wifi_hal.radio_info[r].interface_map);
+        while (ifc) {
+            if (ifc->vap_info.vap_mode == wifi_vap_mode_sta)
+                return ifc;
+            ifc = hash_map_get_next(g_wifi_hal.radio_info[r].interface_map, ifc);
+        }
+        return NULL;
+    }
+    return NULL;
+}
+#endif // FEATURE_SINGLE_PHY
 
 INT get_coutry_str_from_code(wifi_countrycode_type_t code, char *country)
 {
@@ -5807,7 +5892,8 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
                 continue;
             }
 
-            if (interface_iter->index != interface->index) {
+            if (interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id !=
+                interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
                 continue;
             }
 
