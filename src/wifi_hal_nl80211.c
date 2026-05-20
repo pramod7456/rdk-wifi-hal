@@ -56,6 +56,9 @@
 #endif
 #include <linux/filter.h>
 #include <fcntl.h>
+#if defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+#include <linux/sched.h>
+#endif
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
 #include <sys/mman.h>
@@ -73,7 +76,8 @@
 #include "wpa_supplicant/config.h"
 #endif
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD) || \
+    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 #include <rdk_nl80211_hal.h>
 #endif
 
@@ -167,6 +171,17 @@ typedef enum {
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 
 #define RATE_LIMIT_HASH_MAP_SIZE 200
+#define RATE_LIMIT_BASE_TIMEOUT 5
+#define RATE_LIMIT_MAX_VIOLATION 5
+#define RATE_LIMIT_RSSI_THRESHOLD -80
+
+#define RL_AUTH       (1 << 0)
+#define RL_ASSOC      (1 << 1)
+#define RL_REASSOC    (1 << 2)
+#define RL_AUTH_OK    (1 << 3)
+#define RL_ASSOC_OK   (1 << 4)
+#define RL_EAP_START  (1 << 5)
+#define RL_FATAL_ERR  (1 << 6)
 
 typedef struct rate_limit_entry {
     mac_address_t mac;
@@ -174,6 +189,10 @@ typedef struct rate_limit_entry {
     time_t window_start;
     time_t blocked_until;
     time_t last_activity;
+    uint8_t violation_count;
+    uint8_t activity_mask;
+    uint8_t penalty_multiplier;
+    int16_t avg_rssi;
 } rate_limit_entry_t;
 
 void prepare_interface_fdset(wifi_hal_priv_t *priv)
@@ -1836,18 +1855,23 @@ static rate_limit_entry_t *wifi_hal_rate_limit_entry_get(mac_address_t mac)
     return entry;
 }
 
-static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac)
+static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac, int rssi)
 {
     time_t time_now;
     mac_addr_str_t mac_str;
     rate_limit_entry_t *entry;
     wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+    int timeout = 0;
+    bool is_progressive = false;
 
     if (!rl->enabled || rl->rate_limit <= 0 || rl->window_size <= 0 || rl->cooldown_time <= 0) {
         return false;
     }
 
-    if (stype != WLAN_FC_STYPE_AUTH && stype != WLAN_FC_STYPE_DEAUTH) {
+    if (stype != WLAN_FC_STYPE_AUTH &&
+        stype != WLAN_FC_STYPE_DEAUTH &&
+        stype != WLAN_FC_STYPE_ASSOC_REQ &&
+        stype != WLAN_FC_STYPE_REASSOC_REQ) {
         return false;
     }
 
@@ -1865,20 +1889,78 @@ static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac
 
     if (difftime(time_now, entry->window_start) >= rl->window_size) {
         entry->packet_count = 0;
+        entry->activity_mask = 0;
+        entry->avg_rssi = 0;
         entry->window_start = time_now;
     }
 
+    // wait for 5 iterations of hard block behavior
+    // TBD -> block if seen twice within rl->window_size or regardless of rl->window_size?
+    if (entry->activity_mask & RL_FATAL_ERR)
+    {
+        entry->packet_count = rl->rate_limit;
+        timeout = rl->cooldown_time;
+        wifi_hal_info_print("%s:%d: client: %s definitive AP Assoc/Auth reject detected\n",
+            __func__, __LINE__, to_mac_str(mac, mac_str));
+        goto block;
+    }
+
+    if (stype == WLAN_FC_STYPE_AUTH)
+        entry->activity_mask |= RL_AUTH;
+    else if (stype == WLAN_FC_STYPE_ASSOC_REQ)
+        entry->activity_mask |= RL_ASSOC;
+    else if (stype == WLAN_FC_STYPE_REASSOC_REQ)
+        entry->activity_mask |= RL_REASSOC;
+
+    if (rssi < -1 && rssi > -100) {
+        if (!entry->avg_rssi)
+            entry->avg_rssi = rssi;
+        else
+            entry->avg_rssi = (entry->avg_rssi + rssi) / 2;
+    }
+
     if (entry->packet_count < rl->rate_limit) {
-        entry->packet_count++;
+        if (stype == WLAN_FC_STYPE_AUTH || stype == WLAN_FC_STYPE_DEAUTH)
+            entry->packet_count++;
         return false;
     }
 
-    wifi_hal_info_print(
-        "%s:%d: blocked frame type:%d from:%s due to rate limit:%d frames per %d sec for %d sec\n",
-        __func__, __LINE__, stype, to_mac_str(mac, mac_str), rl->rate_limit, rl->window_size,
-        rl->cooldown_time);
+    //after 5 iterations
+    is_progressive = (entry->activity_mask & RL_EAP_START) ||
+        (entry->avg_rssi <= RATE_LIMIT_RSSI_THRESHOLD) ||
+        ((entry->activity_mask & RL_AUTH) &&
+        (entry->activity_mask & (RL_ASSOC | RL_REASSOC)) &&
+        (entry->activity_mask & (RL_AUTH_OK | RL_ASSOC_OK)));
 
-    entry->blocked_until = time_now + rl->cooldown_time;
+    if (is_progressive) {
+        /* SOFT BACKOFF */
+        timeout = RATE_LIMIT_BASE_TIMEOUT * (1 << entry->penalty_multiplier);
+        if (timeout > rl->cooldown_time)
+            timeout = rl->cooldown_time;
+        else if (entry->violation_count >= RATE_LIMIT_MAX_VIOLATION)
+            entry->penalty_multiplier++;
+    } else {
+        /* HARD BLOCK */
+        timeout = rl->cooldown_time;
+    }
+
+block:
+    if (entry->violation_count < RATE_LIMIT_MAX_VIOLATION) {
+        entry->violation_count++;
+        entry->packet_count = 0;
+        entry->activity_mask = 0;
+        entry->avg_rssi = 0;
+        wifi_hal_info_print(
+            "%s:%d: client: %s rate limit:%d violation, violation count: %u, allow\n",
+            __func__, __LINE__, to_mac_str(mac, mac_str), rl->rate_limit, entry->violation_count);
+        return false;
+    }
+    entry->blocked_until = time_now + timeout;
+
+    wifi_hal_info_print(
+        "%s:%d: blocked frame type:%d from:%s due to rate limit:%d frames per %d sec for %d sec, %s block\n",
+        __func__, __LINE__, stype, to_mac_str(mac, mac_str), rl->rate_limit, rl->window_size, timeout,
+        is_progressive ? "soft" : "hard");
 
     return true;
 }
@@ -1975,7 +2057,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     fc = le_to_host16(mgmt->frame_control);
     stype = WLAN_FC_GET_STYPE(fc);
 
-    if (is_wifi_hal_rate_limit_block(stype, sta)) {
+    if (is_wifi_hal_rate_limit_block(stype, sta, sig_dbm)) {
         return 0;
     }
 
@@ -3044,6 +3126,12 @@ void recv_data_frame(wifi_interface_info_t *interface)
             __func__, __LINE__, to_mac_str(eth_hdr->src, src_mac_str), to_mac_str(eth_hdr->dest, dst_mac_str), interface->name,
             is_eapol_m4((uint8_t *)hdr, buflen) ? 4 : 2, get_eapol_reply_counter((uint8_t *)hdr, buflen));
 
+        wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+        if (rl->enabled && rl->rate_limit > 0 && rl->window_size > 0 && rl->cooldown_time > 0) {
+            rate_limit_entry_t *entry = wifi_hal_rate_limit_entry_get(sta);
+            if (entry)
+                entry->activity_mask |= RL_EAP_START;
+        }
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
@@ -3279,6 +3367,11 @@ void recv_link_status()
                 }
             }
             if (!found) {
+                return;
+            }
+
+            if (interface && (int)interface->vap_info.vap_index < 0) {
+                wifi_hal_dbg_print("%s:%d: Interface %s is not VAP\n", __func__, __LINE__, interface->name);
                 return;
             }
 
@@ -3927,12 +4020,27 @@ error:
 int get_vap_state(const char *ifname, short *flags)
 {
     struct ifreq ifr;
-    int fd, res;
+    int fd, res = -1;
 
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
     wifi_hal_dbg_print("%s:%d interface name = '%s'\n", __func__, __LINE__, ifr.ifr_name);
 
+#if defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+    int current_ns_fd = -1;
+    int target_ns_fd = -1;
+    current_ns_fd = open("/proc/self/ns/net", O_RDONLY);
+
+    target_ns_fd = open("/var/run/netns/default", O_RDONLY);
+    if (current_ns_fd == -1 || target_ns_fd == -1) {
+        wifi_hal_error_print("%s:%d Failed to open namespace handles\n", __func__, __LINE__);
+        goto cleanup;
+    }
+    if (setns(target_ns_fd, CLONE_NEWNET) != 0) {
+        wifi_hal_error_print("%s:%d Failed to setns to default\n", __func__, __LINE__);
+        goto cleanup;
+    }
+#endif
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         wifi_hal_error_print("%s %d socket error %s\n", __func__, __LINE__, strerror(errno));
         return -1;
@@ -3944,7 +4052,16 @@ int get_vap_state(const char *ifname, short *flags)
         wifi_hal_error_print("%s:%d ioctl failed: (%d) %s\n", __func__, __LINE__, res, strerror(errno));
     }
     close(fd);
-
+#if defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+cleanup:
+    if (current_ns_fd != -1) {
+        setns(current_ns_fd, CLONE_NEWNET);
+        close(current_ns_fd);
+    }
+    if (target_ns_fd != -1) {
+        close(target_ns_fd);
+    }
+#endif
     *flags = ifr.ifr_flags;
 
     return res;
@@ -5365,11 +5482,12 @@ static void wiphy_info_ext_feature_flags(wifi_radio_info_t *radio,
         capa->flags2 |= WPA_DRIVER_FLAGS2_OCV;
     }
 
-    /* XXX: is not present in nl80211_copy.h, maybe needs to be fixed
+#ifdef WPA_DRIVER_FLAGS2_RADAR_BACKGROUND
     if (ext_feature_isset(ext_features, len,
                   NL80211_EXT_FEATURE_RADAR_BACKGROUND)) {
-        capa->flags2 |= WPA_DRIVER_RADAR_BACKGROUND;
-    }*/
+        capa->flags2 |= WPA_DRIVER_FLAGS2_RADAR_BACKGROUND;
+    }
+#endif /* WPA_DRIVER_FLAGS2_RADAR_BACKGROUND */
 }
 
 static unsigned int probe_resp_offload_support(int supp_protocols)
@@ -5774,6 +5892,10 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif
         radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
         memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
+        // Set Channel Scan Capability defaults only
+        radio->capab.boot_only = 1;         // default: boot only
+        radio->capab.scan_impact = WIFI_SCAN_IMPACT_TIME_SLICING;    // default: time slicing
+        radio->capab.min_scan_interval = 20; // default: 20 seconds
         g_wifi_hal.num_radios++;
     }
 
@@ -5807,6 +5929,13 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 
         capa->max_sched_scan_plan_interval =
             nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_INTERVAL]);
+
+        /* If the hardware can't support a 20s gap in its
+         * internal scan plans, we adjust the capability down. */
+        if (capa->max_sched_scan_plan_interval < radio->capab.min_scan_interval) {
+            radio->capab.min_scan_interval =
+                capa->max_sched_scan_plan_interval;
+        }
 
         capa->max_sched_scan_plan_iterations =
             nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_ITERATIONS]);
@@ -5887,6 +6016,9 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
                 break;
             case NL80211_CMD_UPDATE_FT_IES:
                 radio->driver_data.update_ft_ies_supported = 1;
+                break;
+            case NL80211_CMD_TRIGGER_SCAN:
+                radio->capab.boot_only = 0; /* on-demand scan supported */
                 break;
             }
         }
@@ -6061,6 +6193,28 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+
+    if (tb[NL80211_ATTR_FEATURE_FLAGS]) {
+        u32 flags = nla_get_u32(tb[NL80211_ATTR_FEATURE_FLAGS]);
+        if (flags & NL80211_FEATURE_SCAN_FLUSH) {
+            radio->capab.scan_impact = WIFI_SCAN_IMPACT_NONE;
+        }
+    }
+
+#if !defined(CONFIG_HW_CAPABILITIES) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+    if (tb[NL80211_ATTR_SUPPORTED_COMMANDS]) {
+        struct nlattr *nl_cmd;
+        int i;
+
+        nla_for_each_nested(nl_cmd, tb[NL80211_ATTR_SUPPORTED_COMMANDS], i) {
+            if (nla_get_u32(nl_cmd) == NL80211_CMD_TRIGGER_SCAN) {
+                radio->capab.boot_only = 0; /* on-demand scan supported */
+                break;
+            }
+        }
+    }
+#endif /* !CONFIG_HW_CAPABILITIES && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+
     if (tb[NL80211_ATTR_WDEV]) {
         radio->dev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
     }
@@ -6731,13 +6885,13 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
                         __LINE__, link_idx);
                         break;
                     }
-                    associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID = link_id;
-                    associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_RSSI = link_rssi;
-                    associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid = true;
-                    link_idx++;
-                    has_link_stats = true;
                 }
             }
+            associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID = link_id;
+            associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_RSSI = link_rssi;
+            associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid = true;
+            link_idx++;
+            has_link_stats = true;
         }
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE
@@ -6785,6 +6939,8 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID = link_id;
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_RSSI = rssi;
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid = true;
+            memcpy(associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkAddress,
+                link->peer_addr, sizeof(associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkAddress));
             link_idx++;
             has_link_stats = true;
         }
@@ -6799,10 +6955,6 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
 
         for (int link_idx = 0; link_idx < MAX_NUM_RADIOS; link_idx++) {
             if (associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid) {
-                //Determine assoc link
-                if (associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID == mld_assoc_link_id) {
-                    associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_IsAssocLink = true;
-                }
                 //update vap index for the link
                 int link_id = associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID;
                 wifi_interface_info_t *link_iface = wifi_hal_get_mld_interface_by_link_id(interface, link_id);
@@ -6813,6 +6965,18 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
                     continue;
                 }
                 associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_VapIndex = link_iface->vap_info.vap_index;
+                /* Determine assoc link and reorder links to have assoc link at index 0 if it is not already.
+                 * assoc link must be at index 0 */
+                if (link_id == mld_assoc_link_id) {
+                    associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_IsAssocLink = true;
+                    wifi_hal_dbg_print("%s:%d: Link %d is assoc link\n", __func__, __LINE__, link_id);
+                    if (link_idx != 0) {
+                        wifi_mld_sta_link_info_t temp = associated_dev.cli_MLDInfo.cli_LinkInfo[0];
+                        associated_dev.cli_MLDInfo.cli_LinkInfo[0] = associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx];
+                        associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx] = temp;
+                        wifi_hal_dbg_print("%s:%d: Reordered assoc link %d to index 0\n", __func__, __LINE__, link_id);
+                    }
+                }
             }
         }
     } else if (associated_dev.cli_MLDInfo.cli_MLDSta == true && has_link_stats == false) {
@@ -8204,15 +8368,6 @@ Exit:
 
                 interface->beacon_set = 0;
                 start_bss(interface);
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-                if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
-                    if (platform_is_bss_up(wifi_hal_get_interface_name(interface))) {
-                        wifi_hal_error_print("%s:%d %s BSS is down. Bringing it up.\n", __func__,
-                            __LINE__, wifi_hal_get_interface_name(interface));
-                        platform_bss_enable(wifi_hal_get_interface_name(interface), true);
-                    }
-                }               
-#endif
             }
             interface = hash_map_get_next(radio->interface_map, interface);
         }
@@ -8225,7 +8380,7 @@ Exit:
     return 0;
 }
 
-INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_band)
+INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band nl_band)
 {
     struct hostapd_hw_modes *hw_mode;
     wifi_radio_capabilities_t *capability = NULL;
@@ -8339,6 +8494,59 @@ INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_b
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif /* CONFIG_IEEE80211BE */
 
+#ifdef WPA_DRIVER_FLAGS2_RADAR_BACKGROUND
+    capability->zeroDFSSupported =
+        (radio->driver_data.capa.flags2 & WPA_DRIVER_FLAGS2_RADAR_BACKGROUND) ? TRUE : FALSE;
+#else
+    capability->zeroDFSSupported = FALSE;
+#endif /* WPA_DRIVER_FLAGS2_RADAR_BACKGROUND */
+    wifi_hal_dbg_print("%s:%d:  capability, zeroDFSSupported=%u\n",
+            __func__, __LINE__, capability->zeroDFSSupported);
+    /* Populate E-4 op class channel table by iterating hostapd's global_op_class[]
+     * sentinel-terminated table directly - no redundant re-lookup needed.
+     * Filter entries to only those matching this radio's nl_band so that each
+     * radio carries only its own op classes (2.4/5/6/60 GHz). */
+    capability->num_op_class_entries = 0;
+    for (const struct oper_class_map *op = global_op_class;
+         op->op_class != 0 && capability->num_op_class_entries < MAX_OP_CLASS_ENTRIES; op++) {
+        /* Band filter: keep only op classes that belong to nl_band. */
+        if (op->mode == HOSTAPD_MODE_IEEE80211B || op->mode == HOSTAPD_MODE_IEEE80211G) {
+            if (nl_band != NL80211_BAND_2GHZ)
+                continue;
+        } else if (op->mode == HOSTAPD_MODE_IEEE80211A) {
+            /* Op classes 131-137 are 6 GHz (UHB); all others with this mode are 5 GHz. */
+            int op_is_6ghz = (op->op_class >= 131 && op->op_class <= 137);
+            int band_is_6ghz = (nl_band == NL80211_BAND_6GHZ);
+            if (op_is_6ghz != band_is_6ghz)
+                continue;
+            if (nl_band != NL80211_BAND_5GHZ && nl_band != NL80211_BAND_6GHZ)
+                continue;
+        } else if (op->mode == HOSTAPD_MODE_IEEE80211AD) {
+            if (nl_band != NL80211_BAND_60GHZ)
+                continue;
+        } else {
+            continue;
+        }
+
+        unsigned int idx = capability->num_op_class_entries;
+        unsigned char count = 0;
+        for (unsigned int ch = (unsigned int)op->min_chan;
+             ch <= (unsigned int)op->max_chan && count < MAX_CHANNELS_PER_OP_CLASS;
+             ch += op->inc) {
+            capability->op_class_ch_list[idx].channels[count++] = (unsigned char)ch;
+        }
+        if (count == 0) {
+            continue;
+        }
+        capability->op_class_ch_list[idx].op_class     = op->op_class;
+        capability->op_class_ch_list[idx].num_channels = count;
+        capability->num_op_class_entries++;
+        wifi_hal_dbg_print("%s:%d: op_class_ch_list[%u]: op_class=%u channels=%u\n",
+            __func__, __LINE__, idx, op->op_class, count);
+    }
+    wifi_hal_dbg_print("%s:%d: total op_class_ch_list entries populated: %u\n",
+        __func__, __LINE__, capability->num_op_class_entries);
+
     wifi_hal_info_print("%s:%d: Successfully retrieved radio capabilities for nlband:%d\n",
         __func__, __LINE__, nl_band);
     return RETURN_OK;
@@ -8434,16 +8642,16 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
     }
 
     // Also copy to radio cap
-    int rc = wifi_getRadioCapabilityData(radio, nl_band);
+    int rc = wifi_get_radio_capability_data(radio, nl_band);
     if (rc != RETURN_OK) {
-        wifi_hal_dbg_print("%s: wifi_getRadioCapabilityData failed for band %d, rc=%d\n",
+        wifi_hal_dbg_print("%s: get radio capability failed for band %d, rc=%d\n",
                         __func__, nl_band, rc);
     }
 
     return RETURN_OK;
 }
 
-#if defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 {
     wifi_hal_dbg_print("%s:%d: Setting AMSDU for interface->name=%s\n", __func__, __LINE__,
@@ -8490,7 +8698,7 @@ int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
     }
     return RETURN_OK;
 }
-#elif defined(SCXER10_PORT)
+#elif defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
 int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 {
     return platform_set_amsdu_tid(interface, amsdu_tid);
@@ -10323,19 +10531,10 @@ static int conn_get_interface_handler(struct nl_msg *msg, void *arg)
             {
                 ieee80211_freq_to_chan(nla_get_u32(tb[NL80211_ATTR_WIPHY_FREQ]), &channel);
             }
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-           radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
-            if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND){
-                bw = platform_get_bandwidth(interface);
-            } else {
-#endif
             if (tb[NL80211_ATTR_CHANNEL_WIDTH])
             {
                 bw = nla_get_u32(tb[NL80211_ATTR_CHANNEL_WIDTH]);
             }
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-            }
-#endif
         }
     }
     switch (bw) {
@@ -11273,7 +11472,9 @@ static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)len;
     (void)ie_buffer;
 
+    bss->bss_load_element_present = 1;
     bss->chan_utilization = ((unsigned)data[2] * 100) / 255;
+    bss->station_cnt = (unsigned)data[0] | ((unsigned)data[1] << 8);
 }
 
 static void parse_extension_tag(const uint8_t type, uint8_t len, const uint8_t *data,
@@ -12303,12 +12504,6 @@ int wifi_drv_switch_channel(void *priv, struct csa_settings *settings)
 
     nla_nest_end(msg, beacon_csa);
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-    if (settings->freq_params.eht_enabled && (settings->freq_params.freq >= MIN_FREQ_MHZ_6G) && (settings->freq_params.freq <= MAX_FREQ_MHZ_6G)) {
-        platform_switch_channel(interface, settings);
-        ret = 0;
-    } else
-#endif
     ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
     if (ret) {
         wifi_hal_info_print("nl80211: switch_channel failed err=%d (%s)\n", ret, strerror(-ret));
@@ -12630,6 +12825,50 @@ int wifi_drv_read_sta_data(void *priv,
     return 0;
 }
 
+/* Authentication & Association Status Codes (IEEE 802.11) */
+#define WLAN_STATUS_SUCCESS                        0
+#define WLAN_STATUS_CAPABILITY_MISMATCH            10  /* Fatal: Hardware/Standard mismatch */
+#define WLAN_STATUS_UNSUPPORTED_AUTH_ALG           18  /* Fatal: AP doesn't do this method */
+#define WLAN_STATUS_ROBUST_MGMT_POLICY_VIOLATION   31  /* Fatal: MFP (802.11w) required */
+#define WLAN_STATUS_REQUEST_DECLINED               37  /* Fatal: ACL/Blacklist/RADIUS Deny */
+#define WLAN_STATUS_INVALID_RSN_IE_CAP             40  /* Fatal: Malformed/Unsupported RSN */
+#define WLAN_STATUS_INVALID_AKMP                   43  /* Fatal: WPA2 vs WPA3 mismatch */
+#define WLAN_STATUS_INVALID_CIPHER                 45  /* Fatal: Prohibited Cipher (e.g. TKIP) */
+
+// TBD -> discuss the error codes which could be treated as FATAL_ERR
+static void ratelimit_rc_status_check(mac_address_t mac, u16 sc, u16 fc) {
+    wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+    rate_limit_entry_t *entry = NULL;
+    if (!rl->enabled || rl->rate_limit <= 0 || rl->window_size <= 0 || rl->cooldown_time <= 0)
+        return;
+    if (!(entry = wifi_hal_rate_limit_entry_get(mac)))
+        return;
+
+    switch (WLAN_FC_GET_STYPE(fc)) {
+        case WLAN_FC_STYPE_AUTH:
+            if (sc == WLAN_STATUS_SUCCESS)
+                entry->activity_mask |= RL_AUTH_OK;
+            else if (sc == WLAN_STATUS_UNSUPPORTED_AUTH_ALG)
+                entry->activity_mask |= RL_FATAL_ERR;
+
+            break;
+        case WLAN_FC_STYPE_ASSOC_RESP:
+        case WLAN_FC_STYPE_REASSOC_RESP:
+            if (sc == WLAN_STATUS_SUCCESS)
+                entry->activity_mask |= RL_ASSOC_OK;
+            else if (sc == WLAN_STATUS_ROBUST_MGMT_POLICY_VIOLATION ||
+                sc == WLAN_STATUS_REQUEST_DECLINED ||
+                sc == WLAN_STATUS_INVALID_RSN_IE_CAP ||
+                sc == WLAN_STATUS_INVALID_AKMP ||
+                sc == WLAN_STATUS_INVALID_CIPHER ||
+                sc == WLAN_STATUS_CAPABILITY_MISMATCH ||
+                sc == WLAN_STATUS_UNSUPPORTED_AUTH_ALG)
+                entry->activity_mask |= RL_FATAL_ERR;
+
+            break;
+    }
+}
+
 #ifdef HOSTAPD_2_11 //2.11
 int wifi_drv_send_mlme(void *priv, const u8 *data,
                       size_t data_len,int noack,
@@ -12698,6 +12937,7 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.auth.auth_alg),
                 le_to_host16(mgmt->u.auth.auth_transaction),
                 le_to_host16(mgmt->u.auth.status_code));
+                ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.auth.status_code), fc);
             break;
         case WLAN_FC_STYPE_ASSOC_RESP:
             wifi_hal_info_print("%s:%d: interface:%s send assoc resp frame from:%s to:%s cap:0x%x "
@@ -12706,6 +12946,7 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.assoc_resp.capab_info),
                 le_to_host16(mgmt->u.assoc_resp.aid) & 0x3fff,
                 le_to_host16(mgmt->u.assoc_resp.status_code));
+                ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.assoc_resp.status_code), fc);
             break;
         case WLAN_FC_STYPE_REASSOC_RESP:
             wifi_hal_info_print("%s:%d: interface:%s send reassoc resp frame from:%s to:%s "
@@ -12714,6 +12955,7 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.assoc_resp.capab_info),
                 le_to_host16(mgmt->u.assoc_resp.aid) & 0x3fff,
                 le_to_host16(mgmt->u.assoc_resp.status_code));
+                ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.assoc_resp.status_code), fc);
             break;
         case WLAN_FC_STYPE_DISASSOC:
             wifi_hal_info_print("%s:%d: interface:%s send disassoc frame from:%s to:%s sc:%d\n",
@@ -13851,7 +14093,7 @@ int wifi_drv_sta_remove(void *priv, const u8 *addr)
 
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
-    return wifi_sta_remove(interface, addr, -1, 0);
+    return wifi_sta_remove(interface, addr, -1, 1);
 }
 
 int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
@@ -16279,13 +16521,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     ret = nl80211_send_and_recv(msg, beacon_info_handler, &g_wifi_hal, NULL, NULL);
     if (ret != 0) {
         wifi_hal_error_print("%s:%d: Failed to set beacon parameter for interface: %s error: %d(%s)\n", __func__, __LINE__, interface->name, ret, strerror(-ret));
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-        if(radio->oper_param.channelWidth != WIFI_CHANNELBANDWIDTH_320MHZ) {
-#endif
         return -1;
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-        }
-#endif
     }
 #ifdef EAPOL_OVER_NL
     }
