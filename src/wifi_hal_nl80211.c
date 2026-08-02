@@ -13762,6 +13762,10 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.auth.status_code), fc);
             break;
         case WLAN_FC_STYPE_ASSOC_RESP:
+             if (access("/nvram/disassoc", F_OK) == 0) {
+	          wifi_hal_info_print("%s:%d: File present\n",__func__,__LINE__);
+                  mgmt->u.assoc_resp.status_code = host_to_le16(53);
+             }
             wifi_hal_info_print("%s:%d: interface:%s send assoc resp frame from:%s to:%s cap:0x%x "
                                 "aid:%d sc:%d\n",
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str),
@@ -13771,6 +13775,10 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.assoc_resp.status_code), fc);
             break;
         case WLAN_FC_STYPE_REASSOC_RESP:
+             if (access("/nvram/disassoc", F_OK) == 0) {
+	          wifi_hal_info_print("%s:%d: File present\n",__func__,__LINE__);
+                  mgmt->u.assoc_resp.status_code = host_to_le16(53);
+             }
             wifi_hal_info_print("%s:%d: interface:%s send reassoc resp frame from:%s to:%s "
                                 "cap:0x%x aid:%d sc:%d\n",
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str),
